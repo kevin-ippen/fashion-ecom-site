@@ -22,10 +22,10 @@ class Settings(BaseSettings):
     # Unity Catalog
     CATALOG: str = "main"
     SCHEMA: str = "fashion_demo"
-    PRODUCTS_TABLE: str = "products"
-    USERS_TABLE: str = "users"
-    EMBEDDINGS_TABLE: str = "product_image_embeddings"
-    USER_FEATURES_TABLE: str = "user_style_features"
+    PRODUCTS_TABLE: str = "productsdb"
+    USERS_TABLE: str = "usersdb"
+    EMBEDDINGS_TABLE: str = "product_image_embeddingsdb"
+    USER_FEATURES_TABLE: str = "user_style_featuresdb"
 
     # UC Volume for images
     IMAGES_VOLUME_PATH: str = "/Volumes/main/fashion_demo/raw_data/images/"
