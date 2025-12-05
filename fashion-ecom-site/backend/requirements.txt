@@ -19,3 +19,5 @@ python-dotenv==1.0.0
 
 # CORS
 fastapi-cors==0.0.6
+databricks-vectorsearch>=0.22
+requests>=2.31.0
