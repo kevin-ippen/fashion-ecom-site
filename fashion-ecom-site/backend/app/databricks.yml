@@ -1,0 +1,64 @@
+# Databricks App Configuration for Fashion Ecommerce Site
+
+app:
+  name: ecom-visual-search
+  description: Fashion ecommerce with AI-powered visual search and personalized recommendations
+  
+  # Backend API (FastAPI)
+  resources:
+    - name: backend
+      description: FastAPI backend serving product catalog and ML endpoints
+      source_code_path: ./backend
+      
+      # Command to start the backend
+      command:
+        - uvicorn
+        - app.main:app
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "8000"
+      
+      # Environment variables (auto-injected by Databricks Apps)
+      env:
+        - name: DATABRICKS_HOST
+          value: "{{secrets/databricks/host}}"
+        - name: DATABRICKS_TOKEN
+          value: "{{secrets/databricks/token}}"
+        - name: DATABRICKS_HTTP_PATH
+          value: "{{secrets/databricks/http_path}}"
+      
+      # Resource requirements
+      resources:
+        cpu: "2"
+        memory: "4Gi"
+    
+    # Frontend (React + Vite)
+    - name: frontend
+      description: React frontend for ecommerce storefront
+      source_code_path: ./frontend
+      
+      # Command to serve the frontend (after build)
+      command:
+        - npm
+        - run
+        - preview
+        - --
+        - --host
+        - "0.0.0.0"
+        - --port
+        - "3000"
+      
+      # Build command (runs before start)
+      build:
+        - npm
+        - install
+        - &&
+        - npm
+        - run
+        - build
+      
+      # Resource requirements
+      resources:
+        cpu: "1"
+        memory: "2Gi"
