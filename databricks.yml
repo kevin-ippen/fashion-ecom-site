@@ -1,0 +1,22 @@
+# Databricks App Configuration
+app_name: fashion-ecom-site
+version: 1.0.0
+
+# App resources
+resources:
+  - type: app
+    name: fashion-ecom-app
+    config:
+      # App will serve both frontend and backend
+      command:
+        - "uvicorn"
+        - "backend.app.main:app"
+        - "--host"
+        - "0.0.0.0"
+        - "--port"
+        - "8000"
+      env:
+        - name: DATABRICKS_HOST
+          value: ${workspace.host}
+        - name: DATABRICKS_TOKEN
+          value: ${workspace.token}
