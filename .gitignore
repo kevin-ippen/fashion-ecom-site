@@ -8,7 +8,7 @@ env/
 venv/
 ENV/
 *.egg-info/
-dist/
+# dist/  -- Allow frontend/dist/ to be committed
 build/
 .pytest_cache/
 
@@ -30,8 +30,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Frontend build
-frontend/dist/
+# Frontend build - dist/ is now committed for Databricks Apps
+# frontend/dist/ -- Now tracked in git for deployment
 frontend/build/
 
 # OS
