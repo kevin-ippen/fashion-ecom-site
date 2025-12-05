@@ -40,6 +40,7 @@ Thumbs.db
 
 # Databricks
 .databricks/
+databricks.yml
 
 # Old backend (deprecated)
 backend/
