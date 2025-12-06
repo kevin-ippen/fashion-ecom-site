@@ -19,6 +19,16 @@ class Settings(BaseSettings):
     DATABRICKS_TOKEN: Optional[str] = os.getenv("DATABRICKS_TOKEN")
     DATABRICKS_HTTP_PATH: Optional[str] = os.getenv("DATABRICKS_HTTP_PATH")
 
+    # Lakebase PostgreSQL
+    LAKEBASE_HOST: str = os.getenv(
+        "LAKEBASE_HOST",
+        "instance-e2ff35b5-a3fc-44f3-9d65-7cba8332db7c.database.azuredatabricks.net"
+    )
+    LAKEBASE_PORT: int = 5432
+    LAKEBASE_DATABASE: str = os.getenv("LAKEBASE_DATABASE", "databricks_postgres")
+    LAKEBASE_USER: str = os.getenv("LAKEBASE_USER", "token")  # Use token auth
+    LAKEBASE_SSL_MODE: str = "require"
+
     # Unity Catalog
     CATALOG: str = "main"
     SCHEMA: str = "fashion_demo"
@@ -41,6 +51,16 @@ class Settings(BaseSettings):
     # Pagination
     DEFAULT_PAGE_SIZE: int = 24
     MAX_PAGE_SIZE: int = 100
+
+    @property
+    def lakebase_url(self) -> str:
+        """Build PostgreSQL connection URL for Lakebase"""
+        token = self.DATABRICKS_TOKEN or ""
+        return (
+            f"postgresql+asyncpg://{self.LAKEBASE_USER}:{token}@"
+            f"{self.LAKEBASE_HOST}:{self.LAKEBASE_PORT}/{self.LAKEBASE_DATABASE}"
+            f"?sslmode={self.LAKEBASE_SSL_MODE}"
+        )
 
     class Config:
         env_file = ".env"

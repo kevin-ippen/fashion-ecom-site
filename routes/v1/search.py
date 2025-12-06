@@ -1,23 +1,30 @@
 """
 Search API routes (text and image search)
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from models.schemas import SearchRequest, SearchResponse, ProductDetail
-from repositories.lakebase import lakebase_repo
+from repositories.lakebase import LakebaseRepository
+from core.database import get_async_db
 import numpy as np
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 
 @router.post("/text", response_model=SearchResponse)
-async def search_by_text(request: SearchRequest):
+async def search_by_text(
+    request: SearchRequest,
+    db: AsyncSession = Depends(get_async_db)
+):
     """
     Search products by text query
-    Currently using simple LIKE search, will integrate with CLIP text embeddings
+    Currently using simple ILIKE search, will integrate with CLIP text embeddings
     """
+    repo = LakebaseRepository(db)
+
     # Simple text search for now
-    products_data = lakebase_repo.search_products_by_text(
+    products_data = await repo.search_products_by_text(
         query=request.query,
         limit=request.limit
     )
@@ -26,7 +33,7 @@ async def search_by_text(request: SearchRequest):
     products = []
     for p in products_data:
         product = ProductDetail(**p)
-        product.image_url = f"/api/images/{product.image_path}"
+        product.image_url = f"/api/v1/images/{product.image_path}"
         # Add a mock similarity score for demo
         product.similarity_score = 0.85
         products.append(product)
@@ -43,22 +50,25 @@ async def search_by_text(request: SearchRequest):
 async def search_by_image(
     image: UploadFile = File(...),
     user_id: Optional[str] = Form(None),
-    limit: int = Form(20)
+    limit: int = Form(20),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Search products by uploaded image
     Will integrate with CLIP image embeddings
     """
+    repo = LakebaseRepository(db)
+
     # TODO: Implement CLIP image embedding generation
     # For now, return random products as placeholder
 
-    products_data = lakebase_repo.get_products(limit=limit)
+    products_data = await repo.get_products(limit=limit)
 
     # Convert to ProductDetail
     products = []
     for p in products_data:
         product = ProductDetail(**p)
-        product.image_url = f"/api/images/{product.image_path}"
+        product.image_url = f"/api/v1/images/{product.image_path}"
         # Add a mock similarity score for demo
         product.similarity_score = np.random.uniform(0.7, 0.95)
         products.append(product)
@@ -75,11 +85,17 @@ async def search_by_image(
 
 
 @router.get("/recommendations/{user_id}", response_model=SearchResponse)
-async def get_recommendations(user_id: str, limit: int = 20):
+async def get_recommendations(
+    user_id: str,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_async_db)
+):
     """
     Get personalized product recommendations for a user
     Uses user style features to find matching products
     """
+    repo = LakebaseRepository(db)
+
     # Load persona to get preferences
     from routes.v1.users import load_personas
 
@@ -99,7 +115,7 @@ async def get_recommendations(user_id: str, limit: int = 20):
     filters["max_price"] = max_price
 
     # Get products
-    products_data = lakebase_repo.get_products(
+    products_data = await repo.get_products(
         limit=limit * 2,  # Get more to filter by colors
         filters=filters
     )
@@ -113,7 +129,7 @@ async def get_recommendations(user_id: str, limit: int = 20):
         color_match = p["base_color"] in preferred_colors if p["base_color"] else False
 
         product = ProductDetail(**p)
-        product.image_url = f"/api/images/{product.image_path}"
+        product.image_url = f"/api/v1/images/{product.image_path}"
 
         # Calculate personalization score
         score = 0.5  # Base score

@@ -1,10 +1,12 @@
 """
 Product API routes
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from models.schemas import ProductListResponse, ProductDetail, FilterOptions
-from repositories.lakebase import lakebase_repo
+from repositories.lakebase import LakebaseRepository
+from core.database import get_async_db
 from core.config import settings
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -22,11 +24,14 @@ async def list_products(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     sort_by: str = Query("product_display_name", description="Field to sort by"),
-    sort_order: str = Query("ASC", regex="^(ASC|DESC)$")
+    sort_order: str = Query("ASC", regex="^(ASC|DESC)$"),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get paginated list of products with optional filtering
     """
+    repo = LakebaseRepository(db)
+
     # Build filters dict
     filters = {}
     if gender:
@@ -48,7 +53,7 @@ async def list_products(
     offset = (page - 1) * page_size
 
     # Get products and total count
-    products_data = lakebase_repo.get_products(
+    products_data = await repo.get_products(
         limit=page_size,
         offset=offset,
         filters=filters if filters else None,
@@ -56,14 +61,14 @@ async def list_products(
         sort_order=sort_order
     )
 
-    total = lakebase_repo.get_product_count(filters if filters else None)
+    total = await repo.get_product_count(filters if filters else None)
 
     # Convert to ProductDetail models
     products = []
     for p in products_data:
         product = ProductDetail(**p)
         # Add image URL (we'll create an endpoint to serve images)
-        product.image_url = f"/api/images/{product.image_path}"
+        product.image_url = f"/api/v1/images/{product.image_path}"
         products.append(product)
 
     return ProductListResponse(
@@ -76,25 +81,30 @@ async def list_products(
 
 
 @router.get("/{product_id}", response_model=ProductDetail)
-async def get_product(product_id: str):
+async def get_product(
+    product_id: str,
+    db: AsyncSession = Depends(get_async_db)
+):
     """
     Get a single product by ID
     """
-    product_data = lakebase_repo.get_product_by_id(product_id)
+    repo = LakebaseRepository(db)
+    product_data = await repo.get_product_by_id(product_id)
 
     if not product_data:
         raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
 
     product = ProductDetail(**product_data)
-    product.image_url = f"/api/images/{product.image_path}"
+    product.image_url = f"/api/v1/images/{product.image_path}"
 
     return product
 
 
 @router.get("/filters/options", response_model=FilterOptions)
-async def get_filter_options():
+async def get_filter_options(db: AsyncSession = Depends(get_async_db)):
     """
     Get all available filter options for products
     """
-    options = lakebase_repo.get_filter_options()
+    repo = LakebaseRepository(db)
+    options = await repo.get_filter_options()
     return FilterOptions(**options)

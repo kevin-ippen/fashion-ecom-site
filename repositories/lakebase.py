@@ -1,47 +1,37 @@
 """
-Lakebase repository for Unity Catalog data access
+Lakebase repository for Unity Catalog data access via PostgreSQL
 """
 from typing import List, Optional, Dict, Any
-from databricks import sql
-from databricks.sdk import WorkspaceClient
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from core.config import settings
-import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class LakebaseRepository:
-    """Repository for accessing Unity Catalog tables via Lakebase"""
+    """Repository for accessing Unity Catalog tables via Lakebase PostgreSQL"""
 
-    def __init__(self):
+    def __init__(self, session: AsyncSession):
+        self.session = session
         self.catalog = settings.CATALOG
         self.schema = settings.SCHEMA
-        self.connection = None
 
-    def _get_connection(self):
-        """Get or create Databricks SQL connection"""
-        if self.connection is None:
-            self.connection = sql.connect(
-                server_hostname=settings.DATABRICKS_HOST,
-                http_path=settings.DATABRICKS_HTTP_PATH,
-                access_token=settings.DATABRICKS_TOKEN
-            )
-        return self.connection
-
-    def _execute_query(self, query: str, params: Optional[Dict] = None) -> List[Dict[str, Any]]:
+    async def _execute_query(self, query: str, params: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """Execute a SQL query and return results as list of dicts"""
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
         try:
-            cursor.execute(query, params or {})
-            columns = [desc[0] for desc in cursor.description]
-            results = []
-            for row in cursor.fetchall():
-                results.append(dict(zip(columns, row)))
-            return results
-        finally:
-            cursor.close()
+            result = await self.session.execute(text(query), params or {})
+            columns = result.keys()
+            rows = result.fetchall()
+            return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            logger.error(f"Query execution error: {e}")
+            logger.error(f"Query: {query}")
+            logger.error(f"Params: {params}")
+            raise
 
-    def get_products(
+    async def get_products(
         self,
         limit: int = 24,
         offset: int = 0,
@@ -84,17 +74,21 @@ class LakebaseRepository:
 
         where_clause = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
+        # Add limit and offset to params
+        params["limit"] = limit
+        params["offset"] = offset
+
         query = f"""
             SELECT *
             FROM {self.catalog}.{self.schema}.{settings.PRODUCTS_TABLE}
             {where_clause}
             ORDER BY {sort_by} {sort_order}
-            LIMIT {limit} OFFSET {offset}
+            LIMIT :limit OFFSET :offset
         """
 
-        return self._execute_query(query, params)
+        return await self._execute_query(query, params)
 
-    def get_product_count(self, filters: Optional[Dict[str, Any]] = None) -> int:
+    async def get_product_count(self, filters: Optional[Dict[str, Any]] = None) -> int:
         """Get total count of products matching filters"""
         where_clauses = []
         params = {}
@@ -132,20 +126,20 @@ class LakebaseRepository:
             {where_clause}
         """
 
-        result = self._execute_query(query, params)
+        result = await self._execute_query(query, params)
         return result[0]["count"] if result else 0
 
-    def get_product_by_id(self, product_id: str) -> Optional[Dict[str, Any]]:
+    async def get_product_by_id(self, product_id: str) -> Optional[Dict[str, Any]]:
         """Get a single product by ID"""
         query = f"""
             SELECT *
             FROM {self.catalog}.{self.schema}.{settings.PRODUCTS_TABLE}
             WHERE product_id = :product_id
         """
-        results = self._execute_query(query, {"product_id": product_id})
+        results = await self._execute_query(query, {"product_id": product_id})
         return results[0] if results else None
 
-    def get_product_embeddings(self, product_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    async def get_product_embeddings(self, product_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Get product embeddings, optionally filtered by product IDs"""
         if product_ids:
             # Convert list to SQL IN clause
@@ -159,60 +153,61 @@ class LakebaseRepository:
             FROM {self.catalog}.{self.schema}.{settings.EMBEDDINGS_TABLE}
             {where_clause}
         """
-        return self._execute_query(query)
+        return await self._execute_query(query)
 
-    def get_users(self) -> List[Dict[str, Any]]:
+    async def get_users(self) -> List[Dict[str, Any]]:
         """Get all users"""
         query = f"""
             SELECT *
             FROM {self.catalog}.{self.schema}.{settings.USERS_TABLE}
         """
-        return self._execute_query(query)
+        return await self._execute_query(query)
 
-    def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+    async def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get a single user by ID"""
         query = f"""
             SELECT *
             FROM {self.catalog}.{self.schema}.{settings.USERS_TABLE}
             WHERE user_id = :user_id
         """
-        results = self._execute_query(query, {"user_id": user_id})
+        results = await self._execute_query(query, {"user_id": user_id})
         return results[0] if results else None
 
-    def get_user_style_features(self, user_id: str) -> Optional[Dict[str, Any]]:
+    async def get_user_style_features(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user style features by user ID"""
         query = f"""
             SELECT *
             FROM {self.catalog}.{self.schema}.{settings.USER_FEATURES_TABLE}
             WHERE user_id = :user_id
         """
-        results = self._execute_query(query, {"user_id": user_id})
+        results = await self._execute_query(query, {"user_id": user_id})
         return results[0] if results else None
 
-    def get_filter_options(self) -> Dict[str, List[str]]:
+    async def get_filter_options(self) -> Dict[str, List[str]]:
         """Get all available filter options"""
+        # Note: PostgreSQL uses array_agg instead of COLLECT_SET
         query = f"""
             SELECT
-                COLLECT_SET(gender) as genders,
-                COLLECT_SET(master_category) as master_categories,
-                COLLECT_SET(sub_category) as sub_categories,
-                COLLECT_SET(article_type) as article_types,
-                COLLECT_SET(base_color) as colors,
-                COLLECT_SET(season) as seasons,
+                array_agg(DISTINCT gender) as genders,
+                array_agg(DISTINCT master_category) as master_categories,
+                array_agg(DISTINCT sub_category) as sub_categories,
+                array_agg(DISTINCT article_type) as article_types,
+                array_agg(DISTINCT base_color) as colors,
+                array_agg(DISTINCT season) as seasons,
                 MIN(price) as min_price,
                 MAX(price) as max_price
             FROM {self.catalog}.{self.schema}.{settings.PRODUCTS_TABLE}
         """
-        results = self._execute_query(query)
+        results = await self._execute_query(query)
         if results:
             result = results[0]
             return {
-                "genders": sorted(result["genders"]) if result["genders"] else [],
-                "master_categories": sorted(result["master_categories"]) if result["master_categories"] else [],
-                "sub_categories": sorted(result["sub_categories"]) if result["sub_categories"] else [],
-                "article_types": sorted(result["article_types"]) if result["article_types"] else [],
-                "colors": sorted(result["colors"]) if result["colors"] else [],
-                "seasons": sorted(result["seasons"]) if result["seasons"] else [],
+                "genders": sorted([g for g in result["genders"] if g]) if result["genders"] else [],
+                "master_categories": sorted([c for c in result["master_categories"] if c]) if result["master_categories"] else [],
+                "sub_categories": sorted([c for c in result["sub_categories"] if c]) if result["sub_categories"] else [],
+                "article_types": sorted([a for a in result["article_types"] if a]) if result["article_types"] else [],
+                "colors": sorted([c for c in result["colors"] if c]) if result["colors"] else [],
+                "seasons": sorted([s for s in result["seasons"] if s]) if result["seasons"] else [],
                 "price_range": {
                     "min": float(result["min_price"]) if result["min_price"] else 0,
                     "max": float(result["max_price"]) if result["max_price"] else 0
@@ -220,24 +215,14 @@ class LakebaseRepository:
             }
         return {}
 
-    def search_products_by_text(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """Search products by text query (simple LIKE search for now)"""
+    async def search_products_by_text(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Search products by text query (simple ILIKE search for now)"""
         sql_query = f"""
             SELECT *
             FROM {self.catalog}.{self.schema}.{settings.PRODUCTS_TABLE}
-            WHERE LOWER(product_display_name) LIKE :query
-                OR LOWER(article_type) LIKE :query
-                OR LOWER(sub_category) LIKE :query
-            LIMIT {limit}
+            WHERE LOWER(product_display_name) ILIKE :query
+                OR LOWER(article_type) ILIKE :query
+                OR LOWER(sub_category) ILIKE :query
+            LIMIT :limit
         """
-        return self._execute_query(sql_query, {"query": f"%{query.lower()}%"})
-
-    def close(self):
-        """Close the database connection"""
-        if self.connection:
-            self.connection.close()
-            self.connection = None
-
-
-# Global repository instance
-lakebase_repo = LakebaseRepository()
+        return await self._execute_query(sql_query, {"query": f"%{query.lower()}%", "limit": limit})
