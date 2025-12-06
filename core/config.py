@@ -63,8 +63,24 @@ class Settings(BaseSettings):
         Authentication: Use LAKEBASE_PASSWORD (personal access token) if set,
         otherwise fall back to DATABRICKS_TOKEN (workspace token).
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         # Use dedicated Lakebase password if set, otherwise fall back to workspace token
-        password = self.LAKEBASE_PASSWORD or self.DATABRICKS_TOKEN or ""
+        password = self.LAKEBASE_PASSWORD or self.DATABRICKS_TOKEN
+
+        if not password:
+            logger.error("⚠️  LAKEBASE AUTHENTICATION ERROR: No password/token found!")
+            logger.error("  - LAKEBASE_PASSWORD is not set")
+            logger.error("  - DATABRICKS_TOKEN is not set")
+            logger.error("  → Set LAKEBASE_PASSWORD environment variable to your Databricks PAT")
+            password = ""  # Will fail, but at least we've logged the issue
+        else:
+            # Log token status (but mask the actual value)
+            token_source = "LAKEBASE_PASSWORD" if self.LAKEBASE_PASSWORD else "DATABRICKS_TOKEN"
+            token_preview = password[:8] + "..." if len(password) > 8 else "***"
+            logger.info(f"✓ Lakebase auth: Using {token_source} (starts with: {token_preview})")
+
         return (
             f"postgresql+asyncpg://{self.LAKEBASE_USER}:{password}@"
             f"{self.LAKEBASE_HOST}:{self.LAKEBASE_PORT}/{self.LAKEBASE_DATABASE}"
