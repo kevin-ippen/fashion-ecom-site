@@ -8,6 +8,38 @@ InvalidPasswordError: Failed to decode token for role "kevin.ippen@databricks.co
 
 This means the authentication credentials are incorrect.
 
+## Quick Diagnostics
+
+**Step 1: Check your configuration**
+
+Visit this endpoint in your deployed app:
+```
+GET https://your-app-url/api/v1/config-check
+```
+
+This will show you:
+- Whether `LAKEBASE_PASSWORD` is set
+- Whether `DATABRICKS_TOKEN` is set
+- Which token source is being used
+- First 8 characters of the token (to verify it's correct)
+
+Example output:
+```json
+{
+  "lakebase_config": {
+    "password_source": "DATABRICKS_TOKEN",
+    "lakebase_password": "❌ NOT SET",
+    "databricks_token": "✓ Set (starts with: dapi1234...)"
+  },
+  "warnings": ["⚠️ LAKEBASE_PASSWORD not set - using DATABRICKS_TOKEN"]
+}
+```
+
+**If you see:**
+- `"password_source": "❌ NONE"` → **No token is set!** Follow Option 1 below.
+- `"databricks_token": "❌ NOT SET"` → Databricks workspace token is missing
+- Token starts with wrong prefix → Wrong token type (should start with `dapi`)
+
 ## Authentication Options
 
 The app needs valid credentials to connect to your Lakebase PostgreSQL instance.
@@ -77,9 +109,34 @@ GET /api/v1/products
 ## Troubleshooting
 
 **Q: Still getting "Failed to decode token"?**
-- A: Make sure your personal access token has not expired
-- A: Verify the token was copied correctly (no extra spaces)
-- A: Check that the token has appropriate permissions for Lakebase
+
+1. **Check app logs** for authentication messages:
+   - Look for: `✓ Lakebase auth: Using DATABRICKS_TOKEN (starts with: dapi...)`
+   - If you see: `⚠️ LAKEBASE AUTHENTICATION ERROR: No password/token found!`
+     → No token is being passed to the app
+
+2. **Use the config-check endpoint**:
+   ```bash
+   curl https://your-app-url/api/v1/config-check
+   ```
+   - Check which token source is being used
+   - Verify token preview matches your expected token
+
+3. **Verify token validity**:
+   - Make sure your personal access token has not expired
+   - Verify the token was copied correctly (no extra spaces)
+   - Check that the token has appropriate permissions for Lakebase
+   - Token should start with `dapi` (Databricks personal access token)
+
+4. **Test token manually**:
+   ```bash
+   psql "host=instance-e2ff35b5-a3fc-44f3-9d65-7cba8332db7c.database.azuredatabricks.net \
+         user=kevin.ippen@databricks.com \
+         dbname=databricks_postgres \
+         port=5432 \
+         sslmode=require"
+   # Enter your token when prompted for password
+   ```
 
 **Q: Getting "role does not exist"?**
 - A: Verify `LAKEBASE_USER` matches your Databricks email exactly
@@ -87,6 +144,10 @@ GET /api/v1/products
 **Q: Connection timeout?**
 - A: Check network connectivity to the Lakebase instance
 - A: Verify the instance hostname is correct
+
+**Q: Token is set but still fails?**
+- A: The workspace token (`DATABRICKS_TOKEN`) may not have Lakebase permissions
+- A: Generate a **Personal Access Token** and set it as `LAKEBASE_PASSWORD`
 
 ## Next Steps
 
