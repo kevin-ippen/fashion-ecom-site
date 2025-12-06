@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     LAKEBASE_PORT: int = 5432
     LAKEBASE_DATABASE: str = os.getenv("LAKEBASE_DATABASE", "databricks_postgres")
     LAKEBASE_USER: str = os.getenv("LAKEBASE_USER", "token")  # Use token auth
-    LAKEBASE_SSL_MODE: str = "require"
+    LAKEBASE_USE_SSL: bool = True  # Require SSL for Databricks Lakebase
 
     # Unity Catalog
     CATALOG: str = "main"
@@ -54,13 +54,16 @@ class Settings(BaseSettings):
 
     @property
     def lakebase_url(self) -> str:
-        """Build PostgreSQL connection URL for Lakebase"""
+        """Build PostgreSQL connection URL for Lakebase with asyncpg driver"""
         token = self.DATABRICKS_TOKEN or ""
-        return (
+        base_url = (
             f"postgresql+asyncpg://{self.LAKEBASE_USER}:{token}@"
             f"{self.LAKEBASE_HOST}:{self.LAKEBASE_PORT}/{self.LAKEBASE_DATABASE}"
-            f"?sslmode={self.LAKEBASE_SSL_MODE}"
         )
+        # asyncpg uses 'ssl=true' not 'sslmode=require'
+        if self.LAKEBASE_USE_SSL:
+            base_url += "?ssl=true"
+        return base_url
 
     class Config:
         env_file = ".env"
