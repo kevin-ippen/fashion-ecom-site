@@ -72,7 +72,7 @@ If you get authentication errors, use Option 1 instead.
 **Connection Details (from code):**
 - **Host**: `instance-e2ff35b5-a3fc-44f3-9d65-7cba8332db7c.database.azuredatabricks.net`
 - **Port**: `5432`
-- **Database**: `databricks_postgres`
+- **Database**: `main`
 - **Username**: `kevin.ippen@databricks.com`
 - **Password**: `LAKEBASE_PASSWORD` env var (or falls back to `DATABRICKS_TOKEN`)
 
@@ -84,7 +84,7 @@ Once you've set `LAKEBASE_PASSWORD`, test the connection:
 # Using psql (if available locally)
 psql "host=instance-e2ff35b5-a3fc-44f3-9d65-7cba8332db7c.database.azuredatabricks.net \
       user=kevin.ippen@databricks.com \
-      dbname=databricks_postgres \
+      dbname=main \
       port=5432 \
       sslmode=require"
 # Enter your token when prompted for password
@@ -101,7 +101,7 @@ GET /api/v1/products
 |----------|----------|-------------|---------|
 | `LAKEBASE_HOST` | No | Lakebase instance hostname | `instance-e2ff35b5-...` |
 | `LAKEBASE_PORT` | No | PostgreSQL port | `5432` |
-| `LAKEBASE_DATABASE` | No | Database name | `databricks_postgres` |
+| `LAKEBASE_DATABASE` | No | Database name | `main` |
 | `LAKEBASE_USER` | No | Username (your Databricks email) | `kevin.ippen@databricks.com` |
 | **`LAKEBASE_PASSWORD`** | **Yes** | **Personal access token** | **None** |
 | `LAKEBASE_SSL_MODE` | No | SSL mode | `require` |
@@ -132,7 +132,7 @@ GET /api/v1/products
    ```bash
    psql "host=instance-e2ff35b5-a3fc-44f3-9d65-7cba8332db7c.database.azuredatabricks.net \
          user=kevin.ippen@databricks.com \
-         dbname=databricks_postgres \
+         dbname=main \
          port=5432 \
          sslmode=require"
    # Enter your token when prompted for password

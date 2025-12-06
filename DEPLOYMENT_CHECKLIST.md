@@ -140,7 +140,7 @@ From a machine with network access to Lakebase:
 ```bash
 psql "host=instance-e2ff35b5-a3fc-44f3-9d65-7cba8332db7c.database.azuredatabricks.net \
       user=kevin.ippen@databricks.com \
-      dbname=databricks_postgres \
+      dbname=main \
       port=5432 \
       sslmode=require"
 # When prompted for password, paste your PAT

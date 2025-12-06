@@ -25,7 +25,7 @@ class Settings(BaseSettings):
         "instance-e2ff35b5-a3fc-44f3-9d65-7cba8332db7c.database.azuredatabricks.net"
     )
     LAKEBASE_PORT: int = 5432
-    LAKEBASE_DATABASE: str = os.getenv("LAKEBASE_DATABASE", "databricks_postgres")
+    LAKEBASE_DATABASE: str = os.getenv("LAKEBASE_DATABASE", "main")  # Database name from Lakebase instance
     LAKEBASE_USER: str = os.getenv("LAKEBASE_USER", "kevin.ippen@databricks.com")  # Databricks email
     LAKEBASE_PASSWORD: Optional[str] = os.getenv("LAKEBASE_PASSWORD")  # Personal access token or workspace token
     LAKEBASE_SSL_MODE: str = os.getenv("LAKEBASE_SSL_MODE", "require")  # SSL: disable, allow, prefer, require, verify-ca, verify-full
