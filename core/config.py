@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     )
     LAKEBASE_PORT: int = 5432
     LAKEBASE_DATABASE: str = os.getenv("LAKEBASE_DATABASE", "databricks_postgres")
-    LAKEBASE_USER: str = os.getenv("LAKEBASE_USER", "token")  # Use token auth
+    LAKEBASE_USER: str = os.getenv("LAKEBASE_USER", "kevin.ippen@databricks.com")  # Databricks email
     LAKEBASE_SSL_MODE: str = os.getenv("LAKEBASE_SSL_MODE", "require")  # SSL: disable, allow, prefer, require, verify-ca, verify-full
 
     # Unity Catalog
