@@ -54,12 +54,15 @@ class Settings(BaseSettings):
 
     @property
     def lakebase_url(self) -> str:
-        """Build PostgreSQL connection URL for Lakebase with asyncpg driver"""
+        """Build PostgreSQL connection URL for Lakebase with asyncpg driver
+
+        Note: SSL is handled via connect_args in database.py, not in the URL.
+        asyncpg does not accept sslmode as a URL parameter.
+        """
         token = self.DATABRICKS_TOKEN or ""
         return (
             f"postgresql+asyncpg://{self.LAKEBASE_USER}:{token}@"
             f"{self.LAKEBASE_HOST}:{self.LAKEBASE_PORT}/{self.LAKEBASE_DATABASE}"
-            f"?sslmode={self.LAKEBASE_SSL_MODE}"
         )
 
     class Config:
