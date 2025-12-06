@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     LAKEBASE_PORT: int = 5432
     LAKEBASE_DATABASE: str = os.getenv("LAKEBASE_DATABASE", "databricks_postgres")
     LAKEBASE_USER: str = os.getenv("LAKEBASE_USER", "kevin.ippen@databricks.com")  # Databricks email
+    LAKEBASE_PASSWORD: Optional[str] = os.getenv("LAKEBASE_PASSWORD")  # Personal access token or workspace token
     LAKEBASE_SSL_MODE: str = os.getenv("LAKEBASE_SSL_MODE", "require")  # SSL: disable, allow, prefer, require, verify-ca, verify-full
 
     # Unity Catalog
@@ -58,10 +59,14 @@ class Settings(BaseSettings):
 
         Note: SSL is handled via connect_args in database.py, not in the URL.
         asyncpg does not accept sslmode as a URL parameter.
+
+        Authentication: Use LAKEBASE_PASSWORD (personal access token) if set,
+        otherwise fall back to DATABRICKS_TOKEN (workspace token).
         """
-        token = self.DATABRICKS_TOKEN or ""
+        # Use dedicated Lakebase password if set, otherwise fall back to workspace token
+        password = self.LAKEBASE_PASSWORD or self.DATABRICKS_TOKEN or ""
         return (
-            f"postgresql+asyncpg://{self.LAKEBASE_USER}:{token}@"
+            f"postgresql+asyncpg://{self.LAKEBASE_USER}:{password}@"
             f"{self.LAKEBASE_HOST}:{self.LAKEBASE_PORT}/{self.LAKEBASE_DATABASE}"
         )
 
