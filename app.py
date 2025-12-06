@@ -8,6 +8,14 @@ from fastapi.staticfiles import StaticFiles
 from core.config import settings
 from routes import api_router
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
@@ -15,6 +23,33 @@ app = FastAPI(
     description="A modern ecommerce storefront with AI-powered visual search and personalized recommendations, built on Databricks",
     version="1.0.0",
 )
+
+# Startup event to log environment configuration
+@app.on_event("startup")
+async def startup_event():
+    """Log configuration on startup for debugging"""
+    logger.info("=" * 80)
+    logger.info("FASHION ECOMMERCE APP STARTING")
+    logger.info("=" * 80)
+
+    # Check environment variables
+    db_host = os.getenv("DATABRICKS_HOST", "NOT SET")
+    db_token = os.getenv("DATABRICKS_TOKEN", "NOT SET")
+    lakebase_pwd = os.getenv("LAKEBASE_PASSWORD", "NOT SET")
+
+    logger.info(f"DATABRICKS_HOST: {'SET' if db_host != 'NOT SET' else 'NOT SET'}")
+    logger.info(f"DATABRICKS_TOKEN: {'SET (starts with: ' + db_token[:8] + '...)' if db_token != 'NOT SET' else 'NOT SET'}")
+    logger.info(f"LAKEBASE_PASSWORD: {'SET (starts with: ' + lakebase_pwd[:8] + '...)' if lakebase_pwd != 'NOT SET' else 'NOT SET'}")
+
+    # Log which token will be used
+    if lakebase_pwd != "NOT SET":
+        logger.info("✓ Will use LAKEBASE_PASSWORD for database authentication")
+    elif db_token != "NOT SET":
+        logger.warning("⚠️  LAKEBASE_PASSWORD not set - falling back to DATABRICKS_TOKEN")
+    else:
+        logger.error("❌ NO AUTHENTICATION TOKEN AVAILABLE! App will fail to connect to database.")
+
+    logger.info("=" * 80)
 
 # Configure CORS
 app.add_middleware(
