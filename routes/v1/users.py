@@ -1,12 +1,14 @@
 """
 User and persona API routes
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 import json
 import os
 from models.schemas import User, UserProfile, ProductDetail
-from repositories.lakebase import lakebase_repo
+from repositories.lakebase import LakebaseRepository
+from core.database import get_async_db
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -43,10 +45,15 @@ async def get_persona(user_id: str):
 
 
 @router.get("/{user_id}/profile", response_model=UserProfile)
-async def get_user_profile(user_id: str):
+async def get_user_profile(
+    user_id: str,
+    db: AsyncSession = Depends(get_async_db)
+):
     """
     Get detailed user profile including purchase history
     """
+    repo = LakebaseRepository(db)
+
     # Load persona data
     personas = load_personas()
     persona = next((p for p in personas if p["user_id"] == user_id), None)
@@ -61,7 +68,7 @@ async def get_user_profile(user_id: str):
         # Pick the first preferred category
         filters["master_category"] = persona["preferred_categories"][0]
 
-    products_data = lakebase_repo.get_products(
+    products_data = await repo.get_products(
         limit=8,
         filters=filters if filters else None
     )
@@ -70,7 +77,7 @@ async def get_user_profile(user_id: str):
     purchase_history = []
     for p in products_data:
         product = ProductDetail(**p)
-        product.image_url = f"/api/images/{product.image_path}"
+        product.image_url = f"/api/v1/images/{product.image_path}"
         purchase_history.append(product)
 
     # Build profile
