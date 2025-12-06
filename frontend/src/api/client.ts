@@ -9,7 +9,7 @@ import type {
   ProductFilters,
 } from '@/types';
 
-const API_BASE = '/api';
+const API_BASE = '/api/v1';
 
 const apiClient = axios.create({
   baseURL: API_BASE,
