@@ -76,6 +76,6 @@ else:
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Cleanup on shutdown"""
-    from repositories.lakebase import lakebase_repo
-    lakebase_repo.close()
+    """Cleanup on shutdown - close database connections"""
+    from core.database import engine
+    await engine.dispose()
