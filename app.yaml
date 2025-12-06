@@ -5,3 +5,5 @@ env:
     value: ${workspace.host}
   - name: DATABRICKS_TOKEN
     value: ${workspace.token}
+  - name: LAKEBASE_PASSWORD
+    value: ${secrets.redditscope.redditkey}
