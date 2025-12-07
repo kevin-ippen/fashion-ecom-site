@@ -1,8 +1,12 @@
 command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
 
-# Environment variables - set these in Databricks Apps UI > Settings > Environment Variables
-# Required:
-#   LAKEBASE_PASSWORD - Your Databricks Personal Access Token (starts with 'dapi')
+# IMPORTANT: Add these resources in Databricks Apps UI first:
+# 1. Secret: scope=redditscope, key=redditkey, resource key=lakebase-token
+# 2. SQL Warehouse (if needed): resource key=sql-warehouse
 #
-# Note: Secret references like ${secrets.scope.key} are not expanding properly
-# in this Databricks Apps environment, so set the actual token value in the UI
+# Then reference them using valueFrom below.
+# The platform will inject actual values at runtime.
+
+env:
+  - name: LAKEBASE_PASSWORD
+    valueFrom: lakebase-token  # Must match resource key in Apps UI
