@@ -99,11 +99,33 @@ class Settings(BaseSettings):
         if not password:
             logger.warning("⚠️  No valid environment variables - attempting to fetch from Databricks Secrets API")
             try:
+                import os
                 from databricks.sdk import WorkspaceClient
-                w = WorkspaceClient()
-                password = w.dbutils.secrets.get(scope="redditscope", key="redditkey")
-                token_source = "Databricks Secrets API (redditscope.redditkey)"
-                logger.info(f"✓ Successfully fetched password from Databricks Secrets API")
+
+                # Temporarily clear invalid env vars to avoid SDK confusion
+                # The SDK throws ValueError when both PAT (DATABRICKS_TOKEN) and OAuth
+                # (CLIENT_ID/CLIENT_SECRET) are present, even if PAT is a literal string
+                saved_vars = {}
+                if self._is_literal_secret_reference(os.getenv("DATABRICKS_TOKEN")):
+                    saved_vars["DATABRICKS_TOKEN"] = os.environ.pop("DATABRICKS_TOKEN", None)
+                    logger.info("  Temporarily cleared literal DATABRICKS_TOKEN to avoid SDK confusion")
+
+                if self._is_literal_secret_reference(os.getenv("DATABRICKS_HOST")):
+                    saved_vars["DATABRICKS_HOST"] = os.environ.pop("DATABRICKS_HOST", None)
+                    logger.info("  Temporarily cleared literal DATABRICKS_HOST to avoid SDK confusion")
+
+                try:
+                    logger.info("  Attempting to fetch secret using OAuth (client_id/client_secret)")
+                    w = WorkspaceClient()
+                    password = w.dbutils.secrets.get(scope="redditscope", key="redditkey")
+                    token_source = "Databricks Secrets API (redditscope.redditkey)"
+                    logger.info(f"✓ Successfully fetched password from Databricks Secrets API")
+                finally:
+                    # Restore env vars
+                    for key, value in saved_vars.items():
+                        if value:
+                            os.environ[key] = value
+
             except Exception as e:
                 logger.error(f"❌ Failed to fetch secret from Databricks Secrets API: {e}")
                 logger.error(f"   Error type: {type(e).__name__}")
