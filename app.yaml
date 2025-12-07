@@ -1,9 +1,8 @@
 command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
 
-env:
-  - name: DATABRICKS_HOST
-    value: ${workspace.host}
-  - name: DATABRICKS_TOKEN
-    value: ${workspace.token}
-  - name: LAKEBASE_PASSWORD
-    value: ${secrets.redditscope.redditkey}
+# Environment variables - set these in Databricks Apps UI > Settings > Environment Variables
+# Required:
+#   LAKEBASE_PASSWORD - Your Databricks Personal Access Token (starts with 'dapi')
+#
+# Note: Secret references like ${secrets.scope.key} are not expanding properly
+# in this Databricks Apps environment, so set the actual token value in the UI
