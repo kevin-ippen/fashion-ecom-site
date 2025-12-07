@@ -1,8 +1,32 @@
 # Troubleshooting Databricks Secret Injection
 
-## Current Issue
+## ✅ AUTOMATIC FALLBACK IMPLEMENTED
 
-The PAT token works and the secret exists, but `LAKEBASE_PASSWORD` isn't being injected into the app's environment variables.
+**Update**: The app now automatically handles secret retrieval with a three-tier strategy:
+
+1. **LAKEBASE_PASSWORD** environment variable (from app.yaml secret reference)
+2. **DATABRICKS_TOKEN** environment variable (workspace token)
+3. **Databricks Secrets API** (fetches `redditscope.redditkey` directly) ← **NEW!**
+
+This is implemented in [core/config.py:56-114](core/config.py#L56-L114). If the app.yaml secret injection fails, the app will automatically fetch the secret using the Databricks SDK.
+
+## What This Means
+
+You should no longer see authentication errors caused by missing secrets. The app will:
+- Try environment variables first (fastest)
+- Fall back to Secrets API if needed (automatic)
+- Log which authentication method succeeded
+
+Check your logs for messages like:
+- `✓ Using LAKEBASE_PASSWORD environment variable` (best case)
+- `✓ Successfully fetched password from Databricks Secrets API` (fallback working)
+- `❌ Failed to fetch secret from Databricks Secrets API` (need to check permissions)
+
+---
+
+## Legacy Troubleshooting Guide
+
+The following steps are for understanding the secret injection process, but may no longer be necessary with the automatic fallback.
 
 ## Step 1: Check Startup Logs
 

@@ -60,26 +60,53 @@ class Settings(BaseSettings):
         Note: SSL is handled via connect_args in database.py, not in the URL.
         asyncpg does not accept sslmode as a URL parameter.
 
-        Authentication: Use LAKEBASE_PASSWORD (personal access token) if set,
-        otherwise fall back to DATABRICKS_TOKEN (workspace token).
+        Authentication strategy (in order of precedence):
+        1. LAKEBASE_PASSWORD environment variable (personal access token)
+        2. DATABRICKS_TOKEN environment variable (workspace token)
+        3. Fetch directly from Databricks Secrets API (redditscope.redditkey)
         """
         import logging
         logger = logging.getLogger(__name__)
 
-        # Use dedicated Lakebase password if set, otherwise fall back to workspace token
-        password = self.LAKEBASE_PASSWORD or self.DATABRICKS_TOKEN
+        password = None
+        token_source = None
 
-        if not password:
-            logger.error("⚠️  LAKEBASE AUTHENTICATION ERROR: No password/token found!")
-            logger.error("  - LAKEBASE_PASSWORD is not set")
-            logger.error("  - DATABRICKS_TOKEN is not set")
-            logger.error("  → Set LAKEBASE_PASSWORD environment variable to your Databricks PAT")
-            password = ""  # Will fail, but at least we've logged the issue
+        # Strategy 1: Try LAKEBASE_PASSWORD env var
+        if self.LAKEBASE_PASSWORD:
+            password = self.LAKEBASE_PASSWORD
+            token_source = "LAKEBASE_PASSWORD (env var)"
+            logger.info(f"✓ Using LAKEBASE_PASSWORD environment variable")
+
+        # Strategy 2: Try DATABRICKS_TOKEN env var
+        elif self.DATABRICKS_TOKEN:
+            password = self.DATABRICKS_TOKEN
+            token_source = "DATABRICKS_TOKEN (env var)"
+            logger.warning(f"⚠️  LAKEBASE_PASSWORD not set - falling back to DATABRICKS_TOKEN")
+
+        # Strategy 3: Try fetching from Databricks Secrets API directly
         else:
-            # Log token status (but mask the actual value)
-            token_source = "LAKEBASE_PASSWORD" if self.LAKEBASE_PASSWORD else "DATABRICKS_TOKEN"
+            logger.warning("⚠️  No environment variables set - attempting to fetch from Databricks Secrets API")
+            try:
+                from databricks.sdk import WorkspaceClient
+                w = WorkspaceClient()
+                password = w.dbutils.secrets.get(scope="redditscope", key="redditkey")
+                token_source = "Databricks Secrets API (redditscope.redditkey)"
+                logger.info(f"✓ Successfully fetched password from Databricks Secrets API")
+            except Exception as e:
+                logger.error(f"❌ Failed to fetch secret from Databricks Secrets API: {e}")
+                logger.error("  → All authentication strategies exhausted!")
+                password = ""
+
+        # Log token preview (mask sensitive data)
+        if password:
             token_preview = password[:8] + "..." if len(password) > 8 else "***"
             logger.info(f"✓ Lakebase auth: Using {token_source} (starts with: {token_preview})")
+        else:
+            logger.error("⚠️  LAKEBASE AUTHENTICATION ERROR: No password/token available!")
+            logger.error("  Tried:")
+            logger.error("    1. LAKEBASE_PASSWORD environment variable")
+            logger.error("    2. DATABRICKS_TOKEN environment variable")
+            logger.error("    3. Databricks Secrets API (redditscope.redditkey)")
 
         return (
             f"postgresql+asyncpg://{self.LAKEBASE_USER}:{password}@"
