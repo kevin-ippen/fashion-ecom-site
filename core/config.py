@@ -110,9 +110,22 @@ class Settings(BaseSettings):
                     saved_vars["DATABRICKS_TOKEN"] = os.environ.pop("DATABRICKS_TOKEN", None)
                     logger.info("  Temporarily cleared literal DATABRICKS_TOKEN to avoid SDK confusion")
 
+                # If DATABRICKS_HOST is a literal reference, replace it with a derived value
                 if self._is_literal_secret_reference(os.getenv("DATABRICKS_HOST")):
                     saved_vars["DATABRICKS_HOST"] = os.environ.pop("DATABRICKS_HOST", None)
                     logger.info("  Temporarily cleared literal DATABRICKS_HOST to avoid SDK confusion")
+
+                    # Derive workspace host from Lakebase host
+                    # Lakebase: instance-xxx.database.azuredatabricks.net
+                    # Workspace: https://xxx.azuredatabricks.net (without 'database' subdomain)
+                    if "azuredatabricks.net" in self.LAKEBASE_HOST:
+                        # Remove the instance and database parts, keep base domain
+                        parts = self.LAKEBASE_HOST.split(".")
+                        # Last 2 parts are the base domain (e.g., azuredatabricks.net)
+                        base_domain = ".".join(parts[-2:])
+                        derived_host = f"https://{base_domain}"
+                        os.environ["DATABRICKS_HOST"] = derived_host
+                        logger.info(f"  Set DATABRICKS_HOST to: {derived_host}")
 
                 try:
                     logger.info("  Attempting to fetch secret using OAuth (client_id/client_secret)")
