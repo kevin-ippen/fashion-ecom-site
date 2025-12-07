@@ -50,25 +50,46 @@ async def startup_event():
     db_token = os.getenv("DATABRICKS_TOKEN", "NOT SET")
     lakebase_pwd = os.getenv("LAKEBASE_PASSWORD", "NOT SET")
 
+    # Helper to detect literal secret references
+    def is_literal_reference(value: str) -> bool:
+        return value.startswith("${") and value.endswith("}")
+
     logger.info("ENVIRONMENT VARIABLES:")
     logger.info(f"  DATABRICKS_HOST: {'SET' if db_host != 'NOT SET' else 'NOT SET'}")
-    logger.info(f"  DATABRICKS_TOKEN: {'SET (starts with: ' + db_token[:8] + '...)' if db_token != 'NOT SET' else 'NOT SET'}")
-    logger.info(f"  LAKEBASE_PASSWORD: {'SET (starts with: ' + lakebase_pwd[:8] + '...)' if lakebase_pwd != 'NOT SET' else 'NOT SET'}")
+
+    if db_token != "NOT SET":
+        if is_literal_reference(db_token):
+            logger.warning(f"  DATABRICKS_TOKEN: LITERAL REFERENCE (not expanded): {db_token[:20]}...")
+        else:
+            logger.info(f"  DATABRICKS_TOKEN: SET (starts with: {db_token[:8]}...)")
+    else:
+        logger.info(f"  DATABRICKS_TOKEN: NOT SET")
+
+    if lakebase_pwd != "NOT SET":
+        if is_literal_reference(lakebase_pwd):
+            logger.warning(f"  LAKEBASE_PASSWORD: LITERAL REFERENCE (not expanded): {lakebase_pwd[:25]}...")
+            logger.warning(f"  ⚠️  app.yaml secret injection FAILED - env var contains literal string!")
+        else:
+            logger.info(f"  LAKEBASE_PASSWORD: SET (starts with: {lakebase_pwd[:8]}...)")
+    else:
+        logger.info(f"  LAKEBASE_PASSWORD: NOT SET")
 
     # Log which token will be used
     logger.info("")
     logger.info("AUTHENTICATION STRATEGY:")
-    if lakebase_pwd != "NOT SET":
+    if lakebase_pwd != "NOT SET" and not is_literal_reference(lakebase_pwd):
         logger.info("  ✓ Will use LAKEBASE_PASSWORD for database authentication")
-    elif db_token != "NOT SET":
-        logger.warning("  ⚠️  LAKEBASE_PASSWORD not set - falling back to DATABRICKS_TOKEN")
+    elif db_token != "NOT SET" and not is_literal_reference(db_token):
+        logger.warning("  ⚠️  LAKEBASE_PASSWORD not valid - falling back to DATABRICKS_TOKEN")
     else:
-        logger.error("  ❌ NO AUTHENTICATION TOKEN AVAILABLE! App will fail to connect to database.")
+        logger.warning("  ⚠️  No valid environment variables found")
+        logger.info("  → Will attempt to fetch from Databricks Secrets API")
 
     logger.info("")
-    logger.info("If no token is set, the app will attempt to fetch from Databricks Secrets API")
+    logger.info("SECRETS API FALLBACK:")
     logger.info("  Scope: redditscope")
     logger.info("  Key: redditkey")
+    logger.info("  This will be used if env vars are not valid")
     logger.info("=" * 80)
     print("=" * 80)  # Close with print() too
 

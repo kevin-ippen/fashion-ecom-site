@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     DEFAULT_PAGE_SIZE: int = 24
     MAX_PAGE_SIZE: int = 100
 
+    def _is_literal_secret_reference(self, value: Optional[str]) -> bool:
+        """Check if a value is a literal secret reference string (not expanded)"""
+        if not value:
+            return False
+        # Check if it's a literal ${...} string (secret reference that wasn't expanded)
+        return value.startswith("${") and value.endswith("}")
+
     @property
     def lakebase_url(self) -> str:
         """Build PostgreSQL connection URL for Lakebase with asyncpg driver
@@ -71,21 +78,26 @@ class Settings(BaseSettings):
         password = None
         token_source = None
 
-        # Strategy 1: Try LAKEBASE_PASSWORD env var
-        if self.LAKEBASE_PASSWORD:
+        # Strategy 1: Try LAKEBASE_PASSWORD env var (but ignore literal ${...} references)
+        if self.LAKEBASE_PASSWORD and not self._is_literal_secret_reference(self.LAKEBASE_PASSWORD):
             password = self.LAKEBASE_PASSWORD
             token_source = "LAKEBASE_PASSWORD (env var)"
             logger.info(f"✓ Using LAKEBASE_PASSWORD environment variable")
+        elif self._is_literal_secret_reference(self.LAKEBASE_PASSWORD):
+            logger.warning(f"⚠️  LAKEBASE_PASSWORD is a literal secret reference: {self.LAKEBASE_PASSWORD[:20]}...")
+            logger.warning("⚠️  Secret injection from app.yaml didn't work - will try fallback methods")
 
-        # Strategy 2: Try DATABRICKS_TOKEN env var
-        elif self.DATABRICKS_TOKEN:
+        # Strategy 2: Try DATABRICKS_TOKEN env var (but ignore literal ${...} references)
+        if not password and self.DATABRICKS_TOKEN and not self._is_literal_secret_reference(self.DATABRICKS_TOKEN):
             password = self.DATABRICKS_TOKEN
             token_source = "DATABRICKS_TOKEN (env var)"
             logger.warning(f"⚠️  LAKEBASE_PASSWORD not set - falling back to DATABRICKS_TOKEN")
+        elif not password and self._is_literal_secret_reference(self.DATABRICKS_TOKEN):
+            logger.warning(f"⚠️  DATABRICKS_TOKEN is also a literal secret reference")
 
         # Strategy 3: Try fetching from Databricks Secrets API directly
-        else:
-            logger.warning("⚠️  No environment variables set - attempting to fetch from Databricks Secrets API")
+        if not password:
+            logger.warning("⚠️  No valid environment variables - attempting to fetch from Databricks Secrets API")
             try:
                 from databricks.sdk import WorkspaceClient
                 w = WorkspaceClient()
@@ -94,11 +106,12 @@ class Settings(BaseSettings):
                 logger.info(f"✓ Successfully fetched password from Databricks Secrets API")
             except Exception as e:
                 logger.error(f"❌ Failed to fetch secret from Databricks Secrets API: {e}")
+                logger.error(f"   Error type: {type(e).__name__}")
                 logger.error("  → All authentication strategies exhausted!")
                 password = ""
 
         # Log token preview (mask sensitive data)
-        if password:
+        if password and not self._is_literal_secret_reference(password):
             token_preview = password[:8] + "..." if len(password) > 8 else "***"
             logger.info(f"✓ Lakebase auth: Using {token_source} (starts with: {token_preview})")
         else:
