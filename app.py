@@ -9,11 +9,16 @@ from core.config import settings
 from routes import api_router
 import os
 import logging
+import sys
 
-# Configure logging
+# Configure logging for Databricks Apps
+# IMPORTANT: Databricks Apps only captures logs written to stdout/stderr
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)  # Explicitly log to stdout for Databricks Apps
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -27,9 +32,17 @@ app = FastAPI(
 # Startup event to log environment configuration
 @app.on_event("startup")
 async def startup_event():
-    """Log configuration on startup for debugging"""
+    """Log configuration on startup for debugging
+
+    Note: These logs are written to stdout and will appear in:
+    - Databricks Apps UI > Your App > Logs tab
+    - https://your-app-url/logz endpoint
+    """
+    print("=" * 80)  # Also use print() to ensure visibility in stdout
     logger.info("=" * 80)
     logger.info("FASHION ECOMMERCE APP STARTING")
+    logger.info("App Version: 1.0.0")
+    logger.info("Logs visible at: <your-app-url>/logz or Databricks Apps UI > Logs tab")
     logger.info("=" * 80)
 
     # Check environment variables
@@ -37,19 +50,27 @@ async def startup_event():
     db_token = os.getenv("DATABRICKS_TOKEN", "NOT SET")
     lakebase_pwd = os.getenv("LAKEBASE_PASSWORD", "NOT SET")
 
-    logger.info(f"DATABRICKS_HOST: {'SET' if db_host != 'NOT SET' else 'NOT SET'}")
-    logger.info(f"DATABRICKS_TOKEN: {'SET (starts with: ' + db_token[:8] + '...)' if db_token != 'NOT SET' else 'NOT SET'}")
-    logger.info(f"LAKEBASE_PASSWORD: {'SET (starts with: ' + lakebase_pwd[:8] + '...)' if lakebase_pwd != 'NOT SET' else 'NOT SET'}")
+    logger.info("ENVIRONMENT VARIABLES:")
+    logger.info(f"  DATABRICKS_HOST: {'SET' if db_host != 'NOT SET' else 'NOT SET'}")
+    logger.info(f"  DATABRICKS_TOKEN: {'SET (starts with: ' + db_token[:8] + '...)' if db_token != 'NOT SET' else 'NOT SET'}")
+    logger.info(f"  LAKEBASE_PASSWORD: {'SET (starts with: ' + lakebase_pwd[:8] + '...)' if lakebase_pwd != 'NOT SET' else 'NOT SET'}")
 
     # Log which token will be used
+    logger.info("")
+    logger.info("AUTHENTICATION STRATEGY:")
     if lakebase_pwd != "NOT SET":
-        logger.info("✓ Will use LAKEBASE_PASSWORD for database authentication")
+        logger.info("  ✓ Will use LAKEBASE_PASSWORD for database authentication")
     elif db_token != "NOT SET":
-        logger.warning("⚠️  LAKEBASE_PASSWORD not set - falling back to DATABRICKS_TOKEN")
+        logger.warning("  ⚠️  LAKEBASE_PASSWORD not set - falling back to DATABRICKS_TOKEN")
     else:
-        logger.error("❌ NO AUTHENTICATION TOKEN AVAILABLE! App will fail to connect to database.")
+        logger.error("  ❌ NO AUTHENTICATION TOKEN AVAILABLE! App will fail to connect to database.")
 
+    logger.info("")
+    logger.info("If no token is set, the app will attempt to fetch from Databricks Secrets API")
+    logger.info("  Scope: redditscope")
+    logger.info("  Key: redditkey")
     logger.info("=" * 80)
+    print("=" * 80)  # Close with print() too
 
 # Configure CORS
 app.add_middleware(
