@@ -15,8 +15,7 @@ class LakebaseRepository:
 
     def __init__(self, session: AsyncSession):
         self.session = session
-        self.catalog = settings.CATALOG
-        self.schema = settings.SCHEMA
+        self.schema = settings.LAKEBASE_SCHEMA
 
     async def _execute_query(self, query: str, params: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """Execute a SQL query and return results as list of dicts"""
@@ -80,7 +79,7 @@ class LakebaseRepository:
 
         query = f"""
             SELECT *
-            FROM {self.catalog}.{self.schema}.{settings.PRODUCTS_TABLE}
+            FROM {self.schema}.{settings.PRODUCTS_TABLE}
             {where_clause}
             ORDER BY {sort_by} {sort_order}
             LIMIT :limit OFFSET :offset
@@ -122,7 +121,7 @@ class LakebaseRepository:
 
         query = f"""
             SELECT COUNT(*) as count
-            FROM {self.catalog}.{self.schema}.{settings.PRODUCTS_TABLE}
+            FROM {self.schema}.{settings.PRODUCTS_TABLE}
             {where_clause}
         """
 
@@ -133,7 +132,7 @@ class LakebaseRepository:
         """Get a single product by ID"""
         query = f"""
             SELECT *
-            FROM {self.catalog}.{self.schema}.{settings.PRODUCTS_TABLE}
+            FROM {self.schema}.{settings.PRODUCTS_TABLE}
             WHERE product_id = :product_id
         """
         results = await self._execute_query(query, {"product_id": product_id})
@@ -150,7 +149,7 @@ class LakebaseRepository:
 
         query = f"""
             SELECT *
-            FROM {self.catalog}.{self.schema}.{settings.EMBEDDINGS_TABLE}
+            FROM {self.schema}.{settings.EMBEDDINGS_TABLE}
             {where_clause}
         """
         return await self._execute_query(query)
@@ -159,7 +158,7 @@ class LakebaseRepository:
         """Get all users"""
         query = f"""
             SELECT *
-            FROM {self.catalog}.{self.schema}.{settings.USERS_TABLE}
+            FROM {self.schema}.{settings.USERS_TABLE}
         """
         return await self._execute_query(query)
 
@@ -167,7 +166,7 @@ class LakebaseRepository:
         """Get a single user by ID"""
         query = f"""
             SELECT *
-            FROM {self.catalog}.{self.schema}.{settings.USERS_TABLE}
+            FROM {self.schema}.{settings.USERS_TABLE}
             WHERE user_id = :user_id
         """
         results = await self._execute_query(query, {"user_id": user_id})
@@ -177,7 +176,7 @@ class LakebaseRepository:
         """Get user style features by user ID"""
         query = f"""
             SELECT *
-            FROM {self.catalog}.{self.schema}.{settings.USER_FEATURES_TABLE}
+            FROM {self.schema}.{settings.USER_FEATURES_TABLE}
             WHERE user_id = :user_id
         """
         results = await self._execute_query(query, {"user_id": user_id})
@@ -196,7 +195,7 @@ class LakebaseRepository:
                 array_agg(DISTINCT season) as seasons,
                 MIN(price) as min_price,
                 MAX(price) as max_price
-            FROM {self.catalog}.{self.schema}.{settings.PRODUCTS_TABLE}
+            FROM {self.schema}.{settings.PRODUCTS_TABLE}
         """
         results = await self._execute_query(query)
         if results:
@@ -219,7 +218,7 @@ class LakebaseRepository:
         """Search products by text query (simple ILIKE search for now)"""
         sql_query = f"""
             SELECT *
-            FROM {self.catalog}.{self.schema}.{settings.PRODUCTS_TABLE}
+            FROM {self.schema}.{settings.PRODUCTS_TABLE}
             WHERE LOWER(product_display_name) ILIKE :query
                 OR LOWER(article_type) ILIKE :query
                 OR LOWER(sub_category) ILIKE :query

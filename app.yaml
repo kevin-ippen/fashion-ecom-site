@@ -1,12 +1,1 @@
 command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
-
-# IMPORTANT: Add these resources in Databricks Apps UI first:
-# 1. Secret: scope=redditscope, key=redditkey, resource key=lakebase-token
-# 2. SQL Warehouse (if needed): resource key=sql-warehouse
-#
-# Then reference them using valueFrom below.
-# The platform will inject actual values at runtime.
-
-env:
-  - name: LAKEBASE_PASSWORD
-    valueFrom: lakebase-token  # Must match resource key in Apps UI

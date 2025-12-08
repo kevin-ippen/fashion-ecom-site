@@ -5,6 +5,7 @@ from typing import Optional, List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from databricks import sdk
 from databricks.sdk.core import Config
+from sqlalchemy import create_engine, event
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -23,12 +24,12 @@ class Settings(BaseSettings):
     # Lakebase Postgres (env is injected when the Lakebase resource is attached to the app)
     LAKEBASE_HOST: str = os.getenv("PGHOST", "")
     LAKEBASE_PORT: int = int(os.getenv("PGPORT", "5432"))
-    LAKEBASE_DATABASE: str = os.getenv("PGDATABASE", "main")
+    LAKEBASE_DATABASE: str = os.getenv("PGDATABASE", "databricks_postgres")
     LAKEBASE_USER: str = os.getenv("PGUSER", "")  # SP in Apps; user locally
     LAKEBASE_SSL_MODE: str = "require"
 
     # Unity Catalog (source metadata)
-    CATALOG: str = "main"
+    CATALOG: str = "ecom"
     SCHEMA: str = "fashion_demo"
 
     # Lakebase synced tables (Postgres side)
@@ -37,23 +38,6 @@ class Settings(BaseSettings):
     LAKEBASE_USERS_TABLE: str = "usersdb"
     LAKEBASE_EMBEDDINGS_TABLE: str = "product_image_embeddingsdb"
     LAKEBASE_USER_FEATURES_TABLE: str = "user_style_featuresdb"
-    
-    # Aliases for backward compatibility (without LAKEBASE_ prefix)
-    @property
-    def PRODUCTS_TABLE(self) -> str:
-        return self.LAKEBASE_PRODUCTS_TABLE
-    
-    @property
-    def USERS_TABLE(self) -> str:
-        return self.LAKEBASE_USERS_TABLE
-    
-    @property
-    def EMBEDDINGS_TABLE(self) -> str:
-        return self.LAKEBASE_EMBEDDINGS_TABLE
-    
-    @property
-    def USER_FEATURES_TABLE(self) -> str:
-        return self.LAKEBASE_USER_FEATURES_TABLE
 
     # Model Serving
     CLIP_ENDPOINT: Optional[str] = os.getenv("CLIP_ENDPOINT")
@@ -69,26 +53,16 @@ class Settings(BaseSettings):
     @property
     def lakebase_sqlalchemy_url(self) -> str:
         """
-        Build SQLAlchemy URL for asyncpg with OAuth token injection.
-        Password will be set dynamically via connection string at runtime.
+        Build SQLAlchemy URL WITHOUT embedding a password; we set the password dynamically
+        from a short-lived OAuth token in the SQLAlchemy 'do_connect' hook.
         """
         if not (self.LAKEBASE_HOST and self.LAKEBASE_USER):
             raise RuntimeError(
                 "Missing PGHOST/PGUSER env. Ensure the Lakebase resource is attached to the app "
                 "so the Postgres host and user are injected into the app environment."
             )
-        
-        # Get fresh OAuth token
-        try:
-            token = workspace_client.config.oauth_token().access_token
-            logger.info("✓ Retrieved OAuth token for Lakebase connection")
-        except Exception as e:
-            logger.error(f"❌ Failed to get OAuth token: {e}")
-            raise
-        
-        # Build connection string with token as password (asyncpg format)
         return (
-            f"postgresql+asyncpg://{self.LAKEBASE_USER}:{token}@"
+            f"postgresql+psycopg://{self.LAKEBASE_USER}@"
             f"{self.LAKEBASE_HOST}:{self.LAKEBASE_PORT}/{self.LAKEBASE_DATABASE}"
         )
 
@@ -102,6 +76,28 @@ settings = Settings()
 # Databricks SDK workspace client (OAuth M2M; auto-refresh via unified auth)
 app_config = Config()  # picks up DATABRICKS_HOST, CLIENT_ID/SECRET, WORKSPACE_ID from env
 workspace_client = sdk.WorkspaceClient()
+
+def get_db_engine():
+    """
+    Create SQLAlchemy engine and inject an OAuth token as the Postgres password
+    on each new connection. Tokens are short-lived, so we refresh at connect time.
+    """
+    engine = create_engine(settings.lakebase_sqlalchemy_url, pool_pre_ping=True)
+
+    @event.listens_for(engine, "do_connect")
+    def provide_oauth_token(dialect, conn_rec, cargs, cparams):
+        """Inject fresh OAuth token on each connection."""
+        try:
+            # Refresh OAuth token (~1h lifetime) and set it as Postgres password
+            token = workspace_client.config.oauth_token().access_token
+            cparams["password"] = token
+            logger.info("✓ Injected fresh OAuth token for Lakebase connection")
+        except Exception as e:
+            logger.error(f"❌ Failed to get OAuth token: {e}")
+            raise
+
+    logger.info("✓ Lakebase SQLAlchemy engine initialized with OAuth token injection")
+    return engine
 
 def get_bearer_headers() -> dict:
     """
