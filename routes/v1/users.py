@@ -12,6 +12,19 @@ from core.database import get_async_db
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+# Get workspace host for constructing Files API URLs
+WORKSPACE_HOST = os.getenv("DATABRICKS_HOST", "")
+if WORKSPACE_HOST and not WORKSPACE_HOST.startswith("http"):
+    WORKSPACE_HOST = f"https://{WORKSPACE_HOST}"
+
+
+def get_image_url(product_id: int) -> str:
+    """
+    Construct direct Files API URL for product image
+    Pattern: https://{workspace-host}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{product_id}.jpg
+    """
+    return f"{WORKSPACE_HOST}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{product_id}.jpg"
+
 
 def load_personas():
     """Load persona data from JSON file"""
@@ -77,7 +90,8 @@ async def get_user_profile(
     purchase_history = []
     for p in products_data:
         product = ProductDetail(**p)
-        product.image_url = f"/api/v1/images/{product.image_path}"
+        # Use direct Files API URL
+        product.image_url = get_image_url(int(product.product_id))
         purchase_history.append(product)
 
     # Build profile

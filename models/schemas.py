@@ -9,18 +9,18 @@ from pydantic import BaseModel, Field, field_validator
 class Product(BaseModel):
     """Product catalog model - matches main.fashion_demo.products"""
     product_id: str
-    gender: str
-    master_category: str
-    sub_category: str
-    article_type: str
-    base_color: str
-    season: str
-    year: int
-    usage: str
-    product_display_name: str
-    price: float
-    image_path: str
-    ingested_at: datetime
+    gender: Optional[str] = None
+    master_category: Optional[str] = None
+    sub_category: Optional[str] = None
+    article_type: Optional[str] = None
+    base_color: Optional[str] = None
+    season: Optional[str] = None  # ✅ Now accepts NULL
+    year: Optional[int] = None
+    usage: Optional[str] = None
+    product_display_name: str  # Keep required - should always have a name
+    price: Optional[float] = None
+    image_path: Optional[str] = None
+    ingested_at: Optional[datetime] = None
 
     @field_validator('product_id', mode='before')
     @classmethod

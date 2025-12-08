@@ -8,8 +8,22 @@ from models.schemas import ProductListResponse, ProductDetail, FilterOptions
 from repositories.lakebase import LakebaseRepository
 from core.database import get_async_db
 from core.config import settings
+import os
 
 router = APIRouter(prefix="/products", tags=["products"])
+
+# Get workspace host for constructing Files API URLs
+WORKSPACE_HOST = os.getenv("DATABRICKS_HOST", "")
+if WORKSPACE_HOST and not WORKSPACE_HOST.startswith("http"):
+    WORKSPACE_HOST = f"https://{WORKSPACE_HOST}"
+
+
+def get_image_url(product_id: int) -> str:
+    """
+    Construct direct Files API URL for product image
+    Pattern: https://{workspace-host}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{product_id}.jpg
+    """
+    return f"{WORKSPACE_HOST}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{product_id}.jpg"
 
 
 @router.get("", response_model=ProductListResponse)
@@ -67,8 +81,8 @@ async def list_products(
     products = []
     for p in products_data:
         product = ProductDetail(**p)
-        # Add image URL (we'll create an endpoint to serve images)
-        product.image_url = f"/api/v1/images/{product.image_path}"
+        # Use direct Files API URL instead of proxying through /api/v1/images
+        product.image_url = get_image_url(int(product.product_id))
         products.append(product)
 
     return ProductListResponse(
@@ -89,13 +103,21 @@ async def get_product(
     Get a single product by ID
     """
     repo = LakebaseRepository(db)
-    product_data = await repo.get_product_by_id(product_id)
+    
+    # Convert product_id to int since the database column is INTEGER
+    try:
+        product_id_int = int(product_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid product_id: {product_id}")
+    
+    product_data = await repo.get_product_by_id(product_id_int)
 
     if not product_data:
         raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
 
     product = ProductDetail(**product_data)
-    product.image_url = f"/api/v1/images/{product.image_path}"
+    # Use direct Files API URL instead of proxying through /api/v1/images
+    product.image_url = get_image_url(product_id_int)
 
     return product
 

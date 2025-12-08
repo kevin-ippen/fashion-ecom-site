@@ -8,8 +8,22 @@ from models.schemas import SearchRequest, SearchResponse, ProductDetail
 from repositories.lakebase import LakebaseRepository
 from core.database import get_async_db
 import numpy as np
+import os
 
 router = APIRouter(prefix="/search", tags=["search"])
+
+# Get workspace host for constructing Files API URLs
+WORKSPACE_HOST = os.getenv("DATABRICKS_HOST", "")
+if WORKSPACE_HOST and not WORKSPACE_HOST.startswith("http"):
+    WORKSPACE_HOST = f"https://{WORKSPACE_HOST}"
+
+
+def get_image_url(product_id: int) -> str:
+    """
+    Construct direct Files API URL for product image
+    Pattern: https://{workspace-host}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{product_id}.jpg
+    """
+    return f"{WORKSPACE_HOST}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{product_id}.jpg"
 
 
 @router.post("/text", response_model=SearchResponse)
@@ -33,7 +47,8 @@ async def search_by_text(
     products = []
     for p in products_data:
         product = ProductDetail(**p)
-        product.image_url = f"/api/v1/images/{product.image_path}"
+        # Use direct Files API URL
+        product.image_url = get_image_url(int(product.product_id))
         # Add a mock similarity score for demo
         product.similarity_score = 0.85
         products.append(product)
@@ -68,7 +83,8 @@ async def search_by_image(
     products = []
     for p in products_data:
         product = ProductDetail(**p)
-        product.image_url = f"/api/v1/images/{product.image_path}"
+        # Use direct Files API URL
+        product.image_url = get_image_url(int(product.product_id))
         # Add a mock similarity score for demo
         product.similarity_score = np.random.uniform(0.7, 0.95)
         products.append(product)
@@ -129,7 +145,8 @@ async def get_recommendations(
         color_match = p["base_color"] in preferred_colors if p["base_color"] else False
 
         product = ProductDetail(**p)
-        product.image_url = f"/api/v1/images/{product.image_path}"
+        # Use direct Files API URL
+        product.image_url = get_image_url(int(product.product_id))
 
         # Calculate personalization score
         score = 0.5  # Base score
