@@ -2,8 +2,8 @@
 Pydantic models matching Databricks Unity Catalog table schemas
 """
 from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, Field
+from typing import Optional, List, Union
+from pydantic import BaseModel, Field, field_validator
 
 
 class Product(BaseModel):
@@ -21,6 +21,12 @@ class Product(BaseModel):
     price: float
     image_path: str
     ingested_at: datetime
+
+    @field_validator('product_id', mode='before')
+    @classmethod
+    def coerce_product_id_to_str(cls, v: Union[str, int]) -> str:
+        """Convert product_id to string if it's an int (handles DB type mismatch)"""
+        return str(v) if v is not None else None
 
     class Config:
         from_attributes = True
@@ -50,6 +56,12 @@ class User(BaseModel):
     preferred_categories: List[str]
     segment: str
 
+    @field_validator('user_id', mode='before')
+    @classmethod
+    def coerce_user_id_to_str(cls, v: Union[str, int]) -> str:
+        """Convert user_id to string if it's an int (handles DB type mismatch)"""
+        return str(v) if v is not None else None
+
     class Config:
         from_attributes = True
 
@@ -69,6 +81,12 @@ class UserStyleFeatures(BaseModel):
     user_embedding: List[float]
     num_interactions: int
     created_at: datetime
+
+    @field_validator('user_id', mode='before')
+    @classmethod
+    def coerce_user_id_to_str(cls, v: Union[str, int]) -> str:
+        """Convert user_id to string if it's an int (handles DB type mismatch)"""
+        return str(v) if v is not None else None
 
     class Config:
         from_attributes = True
@@ -93,6 +111,12 @@ class ProductImageEmbedding(BaseModel):
     embedding_model: str
     embedding_dimension: int
     created_at: datetime
+
+    @field_validator('product_id', mode='before')
+    @classmethod
+    def coerce_product_id_to_str(cls, v: Union[str, int]) -> str:
+        """Convert product_id to string if it's an int (handles DB type mismatch)"""
+        return str(v) if v is not None else None
 
     class Config:
         from_attributes = True

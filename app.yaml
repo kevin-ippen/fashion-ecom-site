@@ -1,1 +1,8 @@
 command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+resources:
+  uc_securable:
+    # Grant app service principal READ access to UC volumes for image serving
+    - securable_type: VOLUME
+      securable_full_name: main.fashion_demo.raw_data
+      privilege: READ_VOLUME
