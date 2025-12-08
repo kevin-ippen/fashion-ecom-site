@@ -32,66 +32,39 @@ app = FastAPI(
 # Startup event to log environment configuration
 @app.on_event("startup")
 async def startup_event():
-    """Log configuration on startup for debugging
-
-    Note: These logs are written to stdout and will appear in:
-    - Databricks Apps UI > Your App > Logs tab
-    - https://your-app-url/logz endpoint
-    """
-    print("=" * 80)  # Also use print() to ensure visibility in stdout
+    """Log configuration on startup for debugging"""
     logger.info("=" * 80)
     logger.info("FASHION ECOMMERCE APP STARTING")
-    logger.info("App Version: 1.0.0")
-    logger.info("Logs visible at: <your-app-url>/logz or Databricks Apps UI > Logs tab")
+    logger.info(f"Version: {settings.APP_VERSION}")
     logger.info("=" * 80)
 
     # Check environment variables
-    db_host = os.getenv("DATABRICKS_HOST", "NOT SET")
-    db_token = os.getenv("DATABRICKS_TOKEN", "NOT SET")
-    lakebase_pwd = os.getenv("LAKEBASE_PASSWORD", "NOT SET")
+    client_id = os.getenv("DATABRICKS_CLIENT_ID")
+    client_secret = os.getenv("DATABRICKS_CLIENT_SECRET")
+    lakebase_pwd = os.getenv("LAKEBASE_PASSWORD")
 
-    # Helper to detect literal secret references
-    def is_literal_reference(value: str) -> bool:
-        return value.startswith("${") and value.endswith("}")
+    logger.info("AUTHENTICATION STATUS:")
+    logger.info(f"  OAuth (Service Principal): {'✓ Available' if client_id and client_secret else '✗ Not configured'}")
+    logger.info(f"  PAT Token (LAKEBASE_PASSWORD): {'✓ Available' if lakebase_pwd else '✗ Not set'}")
 
-    logger.info("ENVIRONMENT VARIABLES:")
-    logger.info(f"  DATABRICKS_HOST: {'SET' if db_host != 'NOT SET' else 'NOT SET'}")
+    logger.info("")
+    logger.info("DATABASE CONNECTION:")
+    logger.info(f"  Host: {settings.LAKEBASE_HOST}")
+    logger.info(f"  Database: {settings.LAKEBASE_DATABASE}")
+    logger.info(f"  User: {settings.LAKEBASE_USER}")
+    logger.info(f"  SSL: {settings.LAKEBASE_SSL_MODE}")
 
-    if db_token != "NOT SET":
-        if is_literal_reference(db_token):
-            logger.warning(f"  DATABRICKS_TOKEN: LITERAL REFERENCE (not expanded): {db_token[:20]}...")
-        else:
-            logger.info(f"  DATABRICKS_TOKEN: SET (starts with: {db_token[:8]}...)")
-    else:
-        logger.info(f"  DATABRICKS_TOKEN: NOT SET")
-
-    if lakebase_pwd != "NOT SET":
-        if is_literal_reference(lakebase_pwd):
-            logger.warning(f"  LAKEBASE_PASSWORD: LITERAL REFERENCE (not expanded): {lakebase_pwd[:25]}...")
-            logger.warning(f"  ⚠️  app.yaml secret injection FAILED - env var contains literal string!")
-        else:
-            logger.info(f"  LAKEBASE_PASSWORD: SET (starts with: {lakebase_pwd[:8]}...)")
-    else:
-        logger.info(f"  LAKEBASE_PASSWORD: NOT SET")
-
-    # Log which token will be used
     logger.info("")
     logger.info("AUTHENTICATION STRATEGY:")
-    if lakebase_pwd != "NOT SET" and not is_literal_reference(lakebase_pwd):
-        logger.info("  ✓ Will use LAKEBASE_PASSWORD for database authentication")
-    elif db_token != "NOT SET" and not is_literal_reference(db_token):
-        logger.warning("  ⚠️  LAKEBASE_PASSWORD not valid - falling back to DATABRICKS_TOKEN")
+    if client_id and client_secret:
+        logger.info("  1. OAuth (preferred - bypasses IP ACL)")
+        logger.info("  2. PAT token (fallback)")
+    elif lakebase_pwd:
+        logger.info("  Using PAT token from LAKEBASE_PASSWORD")
     else:
-        logger.warning("  ⚠️  No valid environment variables found")
-        logger.info("  → Will attempt to fetch from Databricks Secrets API")
+        logger.error("  ❌ No authentication configured!")
 
-    logger.info("")
-    logger.info("SECRETS API FALLBACK:")
-    logger.info("  Scope: redditscope")
-    logger.info("  Key: redditkey")
-    logger.info("  This will be used if env vars are not valid")
     logger.info("=" * 80)
-    print("=" * 80)  # Close with print() too
 
 # Configure CORS
 app.add_middleware(
