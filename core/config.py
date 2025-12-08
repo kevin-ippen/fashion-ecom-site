@@ -1,9 +1,10 @@
-"""
-Application configuration and settings
-"""
+"""Application configuration and settings"""
 import os
 from typing import Optional
 from pydantic_settings import BaseSettings
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -25,10 +26,10 @@ class Settings(BaseSettings):
         "instance-e2ff35b5-a3fc-44f3-9d65-7cba8332db7c.database.azuredatabricks.net"
     )
     LAKEBASE_PORT: int = 5432
-    LAKEBASE_DATABASE: str = os.getenv("LAKEBASE_DATABASE", "main")  # Database name from Lakebase instance
-    LAKEBASE_USER: str = os.getenv("LAKEBASE_USER", "kevin.ippen@databricks.com")  # Databricks email
-    LAKEBASE_PASSWORD: Optional[str] = os.getenv("LAKEBASE_PASSWORD")  # Personal access token or workspace token
-    LAKEBASE_SSL_MODE: str = os.getenv("LAKEBASE_SSL_MODE", "require")  # SSL: disable, allow, prefer, require, verify-ca, verify-full
+    LAKEBASE_DATABASE: str = os.getenv("LAKEBASE_DATABASE", "main")
+    LAKEBASE_USER: str = os.getenv("LAKEBASE_USER", "kevin.ippen@databricks.com")
+    LAKEBASE_PASSWORD: Optional[str] = os.getenv("LAKEBASE_PASSWORD")
+    LAKEBASE_SSL_MODE: str = os.getenv("LAKEBASE_SSL_MODE", "require")
 
     # Unity Catalog
     CATALOG: str = "main"
@@ -47,117 +48,64 @@ class Settings(BaseSettings):
 
     # API
     API_PREFIX: str = "/api"
-    CORS_ORIGINS: list = ["*"]  # Update for production
+    CORS_ORIGINS: list = ["*"]
 
     # Pagination
     DEFAULT_PAGE_SIZE: int = 24
     MAX_PAGE_SIZE: int = 100
 
-    def _is_literal_secret_reference(self, value: Optional[str]) -> bool:
-        """Check if a value is a literal secret reference string (not expanded)"""
-        if not value:
-            return False
-        # Check if it's a literal ${...} string (secret reference that wasn't expanded)
-        return value.startswith("${") and value.endswith("}")
+    def _get_oauth_token(self) -> Optional[tuple[str, str]]:
+        """Generate OAuth token using service principal (bypasses IP ACL).
+        
+        Returns:
+            Tuple of (username, token) if successful, None otherwise
+        """
+        client_id = os.getenv("DATABRICKS_CLIENT_ID")
+        client_secret = os.getenv("DATABRICKS_CLIENT_SECRET")
+        
+        if not (client_id and client_secret):
+            return None
+        
+        try:
+            from databricks.sdk import WorkspaceClient
+            w = WorkspaceClient()
+            
+            token_response = w.api_client.do(
+                'POST',
+                '/api/2.0/token/generate',
+                data={'lifetime_seconds': 3600, 'comment': 'Lakebase access'}
+            )
+            oauth_token = token_response.get('access_token')
+            
+            if oauth_token:
+                logger.info("✓ Using OAuth token (bypasses IP ACL)")
+                return (client_id, oauth_token)
+        except Exception as e:
+            logger.warning(f"OAuth token generation failed: {e}")
+        
+        return None
 
     @property
     def lakebase_url(self) -> str:
-        """Build PostgreSQL connection URL for Lakebase with asyncpg driver
-
-        Note: SSL is handled via connect_args in database.py, not in the URL.
-        asyncpg does not accept sslmode as a URL parameter.
-
-        Authentication strategy (in order of precedence):
-        1. LAKEBASE_PASSWORD environment variable (personal access token)
-        2. DATABRICKS_TOKEN environment variable (workspace token)
-        3. Fetch directly from Databricks Secrets API (redditscope.redditkey)
+        """Build PostgreSQL connection URL for Lakebase.
+        
+        Tries OAuth first (bypasses IP ACL), falls back to PAT token.
         """
-        import logging
-        logger = logging.getLogger(__name__)
-
-        password = None
-        token_source = None
-
-        # Strategy 1: Try LAKEBASE_PASSWORD env var (but ignore literal ${...} references)
-        if self.LAKEBASE_PASSWORD and not self._is_literal_secret_reference(self.LAKEBASE_PASSWORD):
-            password = self.LAKEBASE_PASSWORD
-            token_source = "LAKEBASE_PASSWORD (env var)"
-            logger.info(f"✓ Using LAKEBASE_PASSWORD environment variable")
-        elif self._is_literal_secret_reference(self.LAKEBASE_PASSWORD):
-            logger.warning(f"⚠️  LAKEBASE_PASSWORD is a literal secret reference: {self.LAKEBASE_PASSWORD[:20]}...")
-            logger.warning("⚠️  Secret injection from app.yaml didn't work - will try fallback methods")
-
-        # Strategy 2: Try DATABRICKS_TOKEN env var (but ignore literal ${...} references)
-        if not password and self.DATABRICKS_TOKEN and not self._is_literal_secret_reference(self.DATABRICKS_TOKEN):
-            password = self.DATABRICKS_TOKEN
-            token_source = "DATABRICKS_TOKEN (env var)"
-            logger.warning(f"⚠️  LAKEBASE_PASSWORD not set - falling back to DATABRICKS_TOKEN")
-        elif not password and self._is_literal_secret_reference(self.DATABRICKS_TOKEN):
-            logger.warning(f"⚠️  DATABRICKS_TOKEN is also a literal secret reference")
-
-        # Strategy 3: Try fetching from Databricks Secrets API directly
-        if not password:
-            logger.warning("⚠️  No valid environment variables - attempting to fetch from Databricks Secrets API")
-            try:
-                import os
-                from databricks.sdk import WorkspaceClient
-
-                # Temporarily clear invalid env vars to avoid SDK confusion
-                # The SDK throws ValueError when both PAT (DATABRICKS_TOKEN) and OAuth
-                # (CLIENT_ID/CLIENT_SECRET) are present, even if PAT is a literal string
-                saved_vars = {}
-                if self._is_literal_secret_reference(os.getenv("DATABRICKS_TOKEN")):
-                    saved_vars["DATABRICKS_TOKEN"] = os.environ.pop("DATABRICKS_TOKEN", None)
-                    logger.info("  Temporarily cleared literal DATABRICKS_TOKEN to avoid SDK confusion")
-
-                # If DATABRICKS_HOST is a literal reference, replace it with a derived value
-                if self._is_literal_secret_reference(os.getenv("DATABRICKS_HOST")):
-                    saved_vars["DATABRICKS_HOST"] = os.environ.pop("DATABRICKS_HOST", None)
-                    logger.info("  Temporarily cleared literal DATABRICKS_HOST to avoid SDK confusion")
-
-                    # Derive workspace host from Lakebase host
-                    # Lakebase: instance-xxx.database.azuredatabricks.net
-                    # Workspace: https://xxx.azuredatabricks.net (without 'database' subdomain)
-                    if "azuredatabricks.net" in self.LAKEBASE_HOST:
-                        # Remove the instance and database parts, keep base domain
-                        parts = self.LAKEBASE_HOST.split(".")
-                        # Last 2 parts are the base domain (e.g., azuredatabricks.net)
-                        base_domain = ".".join(parts[-2:])
-                        derived_host = f"https://{base_domain}"
-                        os.environ["DATABRICKS_HOST"] = derived_host
-                        logger.info(f"  Set DATABRICKS_HOST to: {derived_host}")
-
-                try:
-                    logger.info("  Attempting to fetch secret using OAuth (client_id/client_secret)")
-                    w = WorkspaceClient()
-                    password = w.dbutils.secrets.get(scope="redditscope", key="redditkey")
-                    token_source = "Databricks Secrets API (redditscope.redditkey)"
-                    logger.info(f"✓ Successfully fetched password from Databricks Secrets API")
-                finally:
-                    # Restore env vars
-                    for key, value in saved_vars.items():
-                        if value:
-                            os.environ[key] = value
-
-            except Exception as e:
-                logger.error(f"❌ Failed to fetch secret from Databricks Secrets API: {e}")
-                logger.error(f"   Error type: {type(e).__name__}")
-                logger.error("  → All authentication strategies exhausted!")
-                password = ""
-
-        # Log token preview (mask sensitive data)
-        if password and not self._is_literal_secret_reference(password):
-            token_preview = password[:8] + "..." if len(password) > 8 else "***"
-            logger.info(f"✓ Lakebase auth: Using {token_source} (starts with: {token_preview})")
+        # Try OAuth first (preferred - bypasses IP ACL)
+        oauth_result = self._get_oauth_token()
+        if oauth_result:
+            username, password = oauth_result
         else:
-            logger.error("⚠️  LAKEBASE AUTHENTICATION ERROR: No password/token available!")
-            logger.error("  Tried:")
-            logger.error("    1. LAKEBASE_PASSWORD environment variable")
-            logger.error("    2. DATABRICKS_TOKEN environment variable")
-            logger.error("    3. Databricks Secrets API (redditscope.redditkey)")
-
+            # Fallback to PAT token
+            username = self.LAKEBASE_USER
+            password = self.LAKEBASE_PASSWORD or ""
+            if password:
+                logger.info("✓ Using PAT token from LAKEBASE_PASSWORD")
+            else:
+                logger.error("❌ No authentication available")
+        
         return (
-            f"postgresql+asyncpg://{self.LAKEBASE_USER}:{password}@"
+            f"postgresql+asyncpg://{username}:{password}@"
             f"{self.LAKEBASE_HOST}:{self.LAKEBASE_PORT}/{self.LAKEBASE_DATABASE}"
         )
 
