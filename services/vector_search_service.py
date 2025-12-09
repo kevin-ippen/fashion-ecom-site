@@ -1,5 +1,5 @@
 """
-Vector Search service for similarity queries
+Vector Search service for similarity queries - FIXED AUTHENTICATION
 Endpoint: fashion_vector_search (4d329fc8-1924-4131-ace8-14b542f8c14b)
 Index: main.fashion_demo.product_embeddings_index
 """
@@ -7,6 +7,7 @@ import logging
 import numpy as np
 from typing import List, Dict, Any, Optional
 from databricks.vector_search.client import VectorSearchClient
+from databricks.sdk import WorkspaceClient
 import os
 
 logger = logging.getLogger(__name__)
@@ -27,14 +28,19 @@ class VectorSearchService:
         self._index = None
     
     def _get_client(self) -> VectorSearchClient:
-        """Get or create Vector Search client"""
+        """Get or create Vector Search client with OAuth authentication"""
         if self._client is None:
-            # VectorSearchClient uses workspace auth automatically in Databricks Apps
+            # ✅ FIX: Get OAuth token from WorkspaceClient
+            w = WorkspaceClient()
+            token = w.config.oauth_token().access_token
+            
+            # ✅ FIX: Pass token explicitly to VectorSearchClient
             self._client = VectorSearchClient(
                 workspace_url=self.workspace_host,
+                personal_access_token=token,  # ← This was missing!
                 disable_notice=True
             )
-            logger.info(f"Created Vector Search client for {self.workspace_host}")
+            logger.info(f"✅ Created Vector Search client for {self.workspace_host}")
         return self._client
     
     def _get_index(self):
@@ -42,7 +48,7 @@ class VectorSearchService:
         if self._index is None:
             client = self._get_client()
             self._index = client.get_index(self.index_name)
-            logger.info(f"Connected to Vector Search index: {self.index_name}")
+            logger.info(f"✅ Connected to Vector Search index: {self.index_name}")
         return self._index
     
     async def similarity_search(
@@ -111,7 +117,7 @@ class VectorSearchService:
             # Parse results
             if "result" in results and "data_array" in results["result"]:
                 data_array = results["result"]["data_array"]
-                logger.info(f"Vector Search returned {len(data_array)} results")
+                logger.info(f"✅ Vector Search returned {len(data_array)} results")
                 
                 # Convert to list of dicts
                 products = []

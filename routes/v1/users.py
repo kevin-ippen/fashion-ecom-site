@@ -1,94 +1,112 @@
-{
-  "personas": [
-    {
-      "user_id": "user_006327",
-      "name": "Budget-Conscious Shopper",
-      "description": "Value-focused shopper who loves accessories at affordable prices",
-      "segment": "budget",
-      "avg_price_point": 27.55,
-      "preferred_categories": ["Accessories", "Apparel"],
-      "color_prefs": ["Black", "Brown", "Purple", "Blue", "White"],
-      "brand_prefs": ["Generic", "Basic", "Everyday"],
-      "min_price": 24.38,
-      "max_price": 32.89,
-      "avg_price": 28.63,
-      "p25_price": 24.38,
-      "p75_price": 32.89,
-      "num_interactions": 31,
-      "purchase_history_ids": [],
-      "style_tags": ["budget", "accessories", "affordable", "everyday"]
-    },
-    {
-      "user_id": "user_007598",
-      "name": "Athletic Performance",
-      "description": "Fitness enthusiast focused on performance sportswear and activewear",
-      "segment": "athletic",
-      "avg_price_point": 46.28,
-      "preferred_categories": ["Apparel", "Footwear", "Accessories"],
-      "color_prefs": ["Black", "White", "Navy Blue", "Blue", "Brown"],
-      "brand_prefs": ["Athletic", "Performance", "Sports"],
-      "min_price": 46.28,
-      "max_price": 46.28,
-      "avg_price": 46.28,
-      "p25_price": 46.28,
-      "p75_price": 46.28,
-      "num_interactions": 30,
-      "purchase_history_ids": [],
-      "style_tags": ["athletic", "performance", "active", "fitness"]
-    },
-    {
-      "user_id": "user_008828",
-      "name": "Luxury Fashionista",
-      "description": "High-end fashion lover who prioritizes designer accessories and premium quality",
-      "segment": "luxury",
-      "avg_price_point": 120.34,
-      "preferred_categories": ["Accessories", "Apparel", "Footwear"],
-      "color_prefs": ["Black", "White", "Brown", "Blue", "Grey"],
-      "brand_prefs": ["Designer", "Premium", "Luxury"],
-      "min_price": 111.32,
-      "max_price": 135.5,
-      "avg_price": 120.34,
-      "p25_price": 111.32,
-      "p75_price": 135.5,
-      "num_interactions": 29,
-      "purchase_history_ids": [],
-      "style_tags": ["luxury", "designer", "premium", "sophisticated"]
-    },
-    {
-      "user_id": "user_001328",
-      "name": "Casual Accessories Lover",
-      "description": "Casual style enthusiast who loves accessories and everyday wear",
-      "segment": "casual",
-      "avg_price_point": 29.15,
-      "preferred_categories": ["Accessories", "Apparel"],
-      "color_prefs": ["Black", "White", "Purple", "Brown", "Steel"],
-      "brand_prefs": ["Casual", "Everyday", "Comfortable"],
-      "min_price": 29.15,
-      "max_price": 29.15,
-      "avg_price": 29.15,
-      "p25_price": 29.15,
-      "p75_price": 29.15,
-      "num_interactions": 31,
-      "purchase_history_ids": [],
-      "style_tags": ["casual", "accessories", "comfortable", "everyday"]
-    },
-    {
-      "user_id": "user_009809",
-      "name": "Vintage Style Enthusiast",
-      "description": "Vintage fashion lover with eclectic taste in accessories and apparel",
-      "segment": "vintage",
-      "avg_price_point": 74.20,
-      "preferred_categories": ["Accessories", "Apparel", "Footwear"],
-      "color_prefs": ["White", "Black", "Blue", "Brown", "Silver"],
-      "brand_prefs": ["Vintage", "Classic", "Retro"],
-      "min_price": 45.09,
-      "max_price": 103.3,
-      "avg_price": 74.20,
-      "p25_price": 45.09,
-      "p75_price": 103.3,
-      "num_interactions": 33,
-      "purchase_history_ids": [],
-      "style_tags": ["vintage", "eclectic", "classic", "retro"]
-    }
-  ]
-}
+"""
+User and persona API routes
+"""
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
+import json
+import os
+from models.schemas import User, UserProfile, ProductDetail
+from repositories.lakebase import LakebaseRepository
+from core.database import get_async_db
+
+router = APIRouter(prefix="/users", tags=["users"])
+
+# Get workspace host for constructing Files API URLs
+WORKSPACE_HOST = os.getenv("DATABRICKS_HOST", "")
+if WORKSPACE_HOST and not WORKSPACE_HOST.startswith("http"):
+    WORKSPACE_HOST = f"https://{WORKSPACE_HOST}"
+
+
+def get_image_url(product_id: int) -> str:
+    """
+    Construct direct Files API URL for product image
+    """
+    return f"{WORKSPACE_HOST}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{product_id}.jpg"
+
+
+def load_personas():
+    """Load persona data from JSON file"""
+    personas_path = os.path.join(os.path.dirname(__file__), "../../data/personas.json")
+    with open(personas_path, "r") as f:
+        data = json.load(f)
+    return data["personas"]
+
+
+@router.get("", response_model=List[dict])
+async def list_personas():
+    """
+    Get all available user personas for demo
+    """
+    personas = load_personas()
+    return personas
+
+
+@router.get("/{user_id}", response_model=dict)
+async def get_persona(user_id: str):
+    """
+    Get a specific user persona by ID
+    """
+    personas = load_personas()
+    persona = next((p for p in personas if p["user_id"] == user_id), None)
+
+    if not persona:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+    return persona
+
+
+@router.get("/{user_id}/profile", response_model=UserProfile)
+async def get_user_profile(
+    user_id: str,
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get detailed user profile including purchase history
+    """
+    repo = LakebaseRepository(db)
+
+    # Load persona data
+    personas = load_personas()
+    persona = next((p for p in personas if p["user_id"] == user_id), None)
+
+    if not persona:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+    # Get some random products as "purchase history"
+    # Filter by user preferences to make it realistic
+    filters = {}
+    if persona.get("preferred_categories"):
+        # Pick the first preferred category
+        filters["master_category"] = persona["preferred_categories"][0]
+
+    products_data = await repo.get_products(
+        limit=8,
+        filters=filters if filters else None
+    )
+
+    # Convert to ProductDetail
+    purchase_history = []
+    for p in products_data:
+        product = ProductDetail(**p)
+        # Use direct Files API URL
+        product.image_url = get_image_url(int(product.product_id))
+        purchase_history.append(product)
+
+    # Build profile
+    profile = UserProfile(
+        user_id=persona["user_id"],
+        segment=persona["segment"],
+        avg_price_point=persona["avg_price_point"],
+        preferred_categories=persona["preferred_categories"],
+        color_prefs=persona["color_prefs"],
+        price_range={
+            "min": persona["min_price"],
+            "max": persona["max_price"],
+            "avg": persona["avg_price"]
+        },
+        num_interactions=persona["num_interactions"],
+        purchase_history=purchase_history
+    )
+
+    return profile
