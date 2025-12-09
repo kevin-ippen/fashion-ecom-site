@@ -128,7 +128,7 @@ class LakebaseRepository:
         result = await self._execute_query(query, params)
         return result[0]["count"] if result else 0
 
-    async def get_product_by_id(self, product_id: str) -> Optional[Dict[str, Any]]:
+    async def get_product_by_id(self, product_id: int) -> Optional[Dict[str, Any]]:
         """Get a single product by ID"""
         query = f"""
             SELECT *
@@ -138,11 +138,11 @@ class LakebaseRepository:
         results = await self._execute_query(query, {"product_id": product_id})
         return results[0] if results else None
 
-    async def get_product_embeddings(self, product_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    async def get_product_embeddings(self, product_ids: Optional[List[int]] = None) -> List[Dict[str, Any]]:
         """Get product embeddings, optionally filtered by product IDs"""
         if product_ids:
             # Convert list to SQL IN clause
-            ids_str = ", ".join([f"'{pid}'" for pid in product_ids])
+            ids_str = ", ".join([str(pid) for pid in product_ids])
             where_clause = f"WHERE product_id IN ({ids_str})"
         else:
             where_clause = ""
@@ -215,13 +215,26 @@ class LakebaseRepository:
         return {}
 
     async def search_products_by_text(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """Search products by text query (simple ILIKE search for now)"""
+        """Search products by text query with NULL handling"""
+        
+        # Log the search query for debugging
+        logger.info(f"Text search: '{query}' in {self.schema}.{settings.PRODUCTS_TABLE}")
+        
         sql_query = f"""
             SELECT *
             FROM {self.schema}.{settings.PRODUCTS_TABLE}
-            WHERE LOWER(product_display_name) ILIKE :query
-                OR LOWER(article_type) ILIKE :query
-                OR LOWER(sub_category) ILIKE :query
+            WHERE
+                (product_display_name IS NOT NULL AND LOWER(product_display_name) ILIKE :query)
+                OR (article_type IS NOT NULL AND LOWER(article_type) ILIKE :query)
+                OR (sub_category IS NOT NULL AND LOWER(sub_category) ILIKE :query)
+                OR (master_category IS NOT NULL AND LOWER(master_category) ILIKE :query)
+                OR (usage IS NOT NULL AND LOWER(usage) ILIKE :query)
             LIMIT :limit
         """
-        return await self._execute_query(sql_query, {"query": f"%{query.lower()}%", "limit": limit})
+        
+        results = await self._execute_query(sql_query, {"query": f"%{query.lower()}%", "limit": limit})
+        
+        # Log results count for debugging
+        logger.info(f"Text search returned {len(results)} results")
+        
+        return results

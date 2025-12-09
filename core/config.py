@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     LAKEBASE_EMBEDDINGS_TABLE: str = "product_image_embeddingsdb"
     LAKEBASE_USER_FEATURES_TABLE: str = "user_style_featuresdb"
     
+    # CLIP Model Serving
+    CLIP_ENDPOINT: str = "clip-image-encoder"
+    CLIP_EMBEDDING_DIM: int = 512
+
+    # Vector Search
+    VS_ENDPOINT_NAME: str = "fashion_vector_search"
+    VS_ENDPOINT_ID: str = "4d329fc8-1924-4131-ace8-14b542f8c14b"
+    VS_INDEX_NAME: str = "main.fashion_demo.product_embeddings_index"
+
     # Aliases for backward compatibility (without LAKEBASE_ prefix)
     @property
     def PRODUCTS_TABLE(self) -> str:

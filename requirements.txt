@@ -21,3 +21,9 @@ pillow==10.2.0
 httpx>=0.26.0
 python-multipart>=0.0.6
 python-dotenv>=1.0.0
+
+# Vector Search - FIXED VERSION
+databricks-vectorsearch>=0.40
+
+# HTTP client for async requests
+aiohttp>=3.9.0
