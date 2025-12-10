@@ -4,6 +4,7 @@ Image serving routes - Redirect to Databricks Files API
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 from databricks.sdk import WorkspaceClient
+from core.config import settings
 import logging
 import os
 
@@ -15,9 +16,7 @@ router = APIRouter(prefix="/images", tags=["images"])
 w = WorkspaceClient()
 
 # Get workspace host for constructing Files API URLs
-WORKSPACE_HOST = os.getenv("DATABRICKS_WORKSPACE_URL", "")
-if WORKSPACE_HOST and not WORKSPACE_HOST.startswith("http"):
-    WORKSPACE_HOST = f"https://{WORKSPACE_HOST}"
+WORKSPACE_HOST = settings.DATABRICKS_WORKSPACE_URL
 
 
 @router.get("/{image_path:path}")

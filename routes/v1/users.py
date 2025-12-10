@@ -9,13 +9,12 @@ import os
 from models.schemas import User, UserProfile, ProductDetail
 from repositories.lakebase import LakebaseRepository
 from core.database import get_async_db
+from core.config import settings
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 # Get workspace host for constructing Files API URLs
-WORKSPACE_HOST = os.getenv("DATABRICKS_WORKSPACE_URL", "")
-if WORKSPACE_HOST and not WORKSPACE_HOST.startswith("http"):
-    WORKSPACE_HOST = f"https://{WORKSPACE_HOST}"
+WORKSPACE_HOST = settings.DATABRICKS_WORKSPACE_URL
 
 
 def get_image_url(product_id) -> str:
