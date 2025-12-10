@@ -1,5 +1,5 @@
 """
-Vector Search service for similarity queries - FIXED AUTHENTICATION
+Vector Search service for similarity queries - FIXED
 Endpoint: fashion_vector_search (4d329fc8-1924-4131-ace8-14b542f8c14b)
 Index: main.fashion_demo.product_embeddings_index
 """
@@ -19,6 +19,7 @@ class VectorSearchService:
     def __init__(self):
         self.endpoint_name = "fashion_vector_search"
         self.endpoint_id = "4d329fc8-1924-4131-ace8-14b542f8c14b"
+        # ✅ Explicitly set the index name
         self.index_name = "main.fashion_demo.product_embeddings_index"
         self.embedding_dim = 512
         self.workspace_host = os.getenv("DATABRICKS_HOST", "")
@@ -26,18 +27,24 @@ class VectorSearchService:
             self.workspace_host = f"https://{self.workspace_host}"
         self._client = None
         self._index = None
+        
+        # Validate index name is set
+        if not self.index_name:
+            raise ValueError("Vector Search index name is not configured!")
+        
+        logger.info(f"🔧 VectorSearchService initialized with index: {self.index_name}")
     
     def _get_client(self) -> VectorSearchClient:
         """Get or create Vector Search client with OAuth authentication"""
         if self._client is None:
-            # ✅ FIX: Get OAuth token from WorkspaceClient
+            # Get OAuth token from WorkspaceClient
             w = WorkspaceClient()
             token = w.config.oauth_token().access_token
             
-            # ✅ FIX: Pass token explicitly to VectorSearchClient
+            # Pass token explicitly to VectorSearchClient
             self._client = VectorSearchClient(
                 workspace_url=self.workspace_host,
-                personal_access_token=token,  # ← This was missing!
+                personal_access_token=token,
                 disable_notice=True
             )
             logger.info(f"✅ Created Vector Search client for {self.workspace_host}")
@@ -46,8 +53,19 @@ class VectorSearchService:
     def _get_index(self):
         """Get Vector Search index"""
         if self._index is None:
+            # Debug: Log the index name being used
+            logger.info(f"🔍 Getting Vector Search index: '{self.index_name}'")
+            
+            if not self.index_name:
+                raise ValueError("Index name is empty or None!")
+            
             client = self._get_client()
-            self._index = client.get_index(self.index_name)
+            
+            # ✅ CRITICAL FIX: Use keyword argument, not positional
+            # OLD: self._index = client.get_index(self.index_name)
+            # NEW: Use explicit keyword argument
+            self._index = client.get_index(index_name=self.index_name)
+            
             logger.info(f"✅ Connected to Vector Search index: {self.index_name}")
         return self._index
     
@@ -79,6 +97,7 @@ class VectorSearchService:
                 query_vector = query_vector / norm
             
             logger.info(f"Vector Search query: dim={query_vector.shape[0]}, norm={np.linalg.norm(query_vector):.4f}, filters={filters}")
+            logger.info(f"Using index: {self.index_name}")
             
             # Get index and perform similarity search
             index = self._get_index()

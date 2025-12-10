@@ -21,6 +21,8 @@ class CLIPService:
             self.workspace_host = f"https://{self.workspace_host}"
         self.embedding_dim = 512  # CLIP ViT-B/32
         
+        logger.info(f"🔧 CLIPService initialized: endpoint={self.endpoint_name}, dim={self.embedding_dim}")
+        
     def _get_endpoint_url(self) -> str:
         """Construct the full endpoint URL"""
         return f"{self.workspace_host}/serving-endpoints/{self.endpoint_name}/invocations"
@@ -73,52 +75,30 @@ class CLIPService:
                     
                     result = await response.json()
             
-            # Debug: Log the raw response
+            # Debug: Log the raw response (first 200 chars)
             logger.info(f"CLIP raw response: {str(result)[:200]}...")
             
-            # Parse response - handle different formats
+            # ✅ Parse response - based on actual format from logs
+            # Format: {'predictions': [0.0121, 0.0134, -0.0073, ...]} - flat array of 512 floats
             embedding = None
             
-            if isinstance(result, dict):
-                # Try different response formats
-                if "predictions" in result:
-                    # Format: {"predictions": [[0.1, 0.2, ...]]}
-                    predictions = result["predictions"]
-                    if isinstance(predictions, list) and len(predictions) > 0:
-                        if isinstance(predictions[0], list):
-                            embedding = np.array(predictions[0], dtype=np.float32)
-                        else:
-                            embedding = np.array(predictions, dtype=np.float32)
-                elif "outputs" in result:
-                    # Format: {"outputs": [[0.1, 0.2, ...]]}
-                    outputs = result["outputs"]
-                    if isinstance(outputs, list) and len(outputs) > 0:
-                        if isinstance(outputs[0], list):
-                            embedding = np.array(outputs[0], dtype=np.float32)
-                        else:
-                            embedding = np.array(outputs, dtype=np.float32)
-                elif "embedding" in result:
-                    # Format: {"embedding": [0.1, 0.2, ...]}
-                    embedding = np.array(result["embedding"], dtype=np.float32)
-                else:
-                    # Try to find any array-like value
-                    for key, value in result.items():
-                        if isinstance(value, list) and len(value) > 0:
-                            if isinstance(value[0], (int, float)):
-                                embedding = np.array(value, dtype=np.float32)
-                                logger.info(f"Found embedding in key: {key}")
-                                break
-                            elif isinstance(value[0], list) and len(value[0]) > 0:
-                                embedding = np.array(value[0], dtype=np.float32)
-                                logger.info(f"Found nested embedding in key: {key}")
-                                break
+            if isinstance(result, dict) and "predictions" in result:
+                predictions = result["predictions"]
+                if isinstance(predictions, list) and len(predictions) > 0:
+                    # Check if it's a flat array or nested
+                    if isinstance(predictions[0], (int, float)):
+                        # Flat array: [0.0121, 0.0134, ...]
+                        embedding = np.array(predictions, dtype=np.float32)
+                    elif isinstance(predictions[0], list):
+                        # Nested array: [[0.0121, 0.0134, ...]]
+                        embedding = np.array(predictions[0], dtype=np.float32)
             elif isinstance(result, list):
-                # Format: [[0.1, 0.2, ...]] or [0.1, 0.2, ...]
+                # Direct array format
                 if len(result) > 0:
-                    if isinstance(result[0], list):
-                        embedding = np.array(result[0], dtype=np.float32)
-                    elif isinstance(result[0], (int, float)):
+                    if isinstance(result[0], (int, float)):
                         embedding = np.array(result, dtype=np.float32)
+                    elif isinstance(result[0], list):
+                        embedding = np.array(result[0], dtype=np.float32)
             
             if embedding is None or embedding.size == 0:
                 logger.error(f"Failed to parse embedding from response. Full response: {result}")

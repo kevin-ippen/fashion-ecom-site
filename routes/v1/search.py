@@ -1,5 +1,5 @@
 """
-Search API routes - FIXED for CLIP image-only endpoint
+Search API routes with CLIP + Vector Search integration
 """
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,12 +84,10 @@ async def search_by_image(
         
         # Read uploaded image
         image_bytes = await image.read()
-        
         logger.info(f"Read {len(image_bytes)} bytes from uploaded image")
         
         # Generate image embedding using CLIP
         image_embedding = await clip_service.get_image_embedding(image_bytes)
-        
         logger.info(f"Generated embedding with shape: {image_embedding.shape}")
         
         # Search for similar products using Vector Search
@@ -158,6 +156,8 @@ async def get_recommendations(
             
             user_embedding = np.array(user_features["user_embedding"], dtype=np.float32)
             
+            logger.info(f"✅ Found user embedding: shape={user_embedding.shape}")
+            
             # Build price filters for Vector Search
             min_price = persona["p25_price"] * 0.8
             max_price = persona["p75_price"] * 1.2
@@ -169,7 +169,7 @@ async def get_recommendations(
                 filters={"price >= ": min_price, "price <= ": max_price}
             )
             
-            logger.info(f"Vector Search returned {len(products_data)} products")
+            logger.info(f"✅ Vector Search returned {len(products_data)} products")
             
         else:
             # Fallback to rule-based if no user embedding
