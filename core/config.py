@@ -41,10 +41,26 @@ class Settings(BaseSettings):
     UC_MULTIMODAL_TABLE: str = "main.fashion_demo.product_embeddings_multimodal"
 
     # Databricks Workspace
-    DATABRICKS_WORKSPACE_URL: str = os.getenv(
-        "DATABRICKS_WORKSPACE_URL",
-        "https://adb-984752964297111.11.azuredatabricks.net"
-    )
+    # Construct from DATABRICKS_HOST if DATABRICKS_WORKSPACE_URL not set
+    @property
+    def DATABRICKS_WORKSPACE_URL(self) -> str:
+        """Get workspace URL from env or construct from DATABRICKS_HOST"""
+        # First try explicit DATABRICKS_WORKSPACE_URL
+        workspace_url = os.getenv("DATABRICKS_WORKSPACE_URL")
+        if workspace_url:
+            if not workspace_url.startswith("http"):
+                return f"https://{workspace_url}"
+            return workspace_url
+
+        # Fall back to DATABRICKS_HOST (set by Databricks Apps)
+        host = os.getenv("DATABRICKS_HOST")
+        if host:
+            if not host.startswith("http"):
+                return f"https://{host}"
+            return host
+
+        # Final fallback to hardcoded default
+        return "https://adb-984752964297111.11.azuredatabricks.net"
 
     # CLIP Multimodal Model Serving
     CLIP_ENDPOINT_NAME: str = "clip-multimodal-encoder"
