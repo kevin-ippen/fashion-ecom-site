@@ -8,6 +8,7 @@ from models.schemas import SearchRequest, SearchResponse, ProductDetail
 from repositories.lakebase import LakebaseRepository
 from core.database import get_async_db
 import numpy as np
+import json
 import os
 import logging
 
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/search", tags=["search"])
 
 # Get workspace host for constructing Files API URLs
-WORKSPACE_HOST = os.getenv("DATABRICKS_HOST", "")
+WORKSPACE_HOST = os.getenv("DATABRICKS_WORKSPACE_URL", "")
 if WORKSPACE_HOST and not WORKSPACE_HOST.startswith("http"):
     WORKSPACE_HOST = f"https://{WORKSPACE_HOST}"
 
@@ -70,7 +71,8 @@ async def search_by_text(
         products = []
         for p in products_data:
             product = ProductDetail(**p)
-            product.image_url = get_image_url(int(product.product_id))
+            # Pass product_id directly - get_image_url handles conversion
+            product.image_url = get_image_url(product.product_id)
             # Similarity score comes from Vector Search
             product.similarity_score = p.get("score", 0.85)
             products.append(product)
@@ -125,7 +127,8 @@ async def search_by_image(
         products = []
         for p in products_data:
             product = ProductDetail(**p)
-            product.image_url = get_image_url(int(product.product_id))
+            # Pass product_id directly - get_image_url handles conversion
+            product.image_url = get_image_url(product.product_id)
             # Similarity score comes from Vector Search
             product.similarity_score = p.get("score", 0.85)
             products.append(product)
@@ -188,14 +191,16 @@ async def get_recommendations(
             # Use Hybrid Vector Search with user embedding
             from services.vector_search_service import vector_search_service
 
-            user_embedding = np.array(user_features["user_embedding"], dtype=np.float32)
+            # Parse JSON string to list, then convert to numpy array
+            embedding_data = user_features["user_embedding"]
+            if isinstance(embedding_data, str):
+                embedding_data = json.loads(embedding_data)
+            
+            user_embedding = np.array(embedding_data, dtype=np.float32)
 
             logger.info(f"✅ Found user embedding: shape={user_embedding.shape}")
 
             # Build flexible filters based on parameters
-            # Databricks Vector Search filter syntax:
-            # - For IN: just pass list directly {"field": ["val1", "val2"]}
-            # - For comparisons: use nested dict {"field": {"$gte": 10, "$lte": 100}}
             filters = {}
 
             if restrict_category and persona.get("preferred_categories"):
@@ -260,11 +265,10 @@ async def get_recommendations(
         category_match = p.get("master_category") in persona.get("preferred_categories", [])
 
         product = ProductDetail(**p)
-        product.image_url = get_image_url(int(product.product_id))
+        # Pass product_id directly - get_image_url handles conversion
+        product.image_url = get_image_url(product.product_id)
 
         # Calculate hybrid score
-        # If from Vector Search, use that score (60%) + rules (40%)
-        # If rule-based only, use rules (100%)
         vector_score = p.get("score", 0.5)  # From Vector Search or default
         rule_score = 0.0
         
@@ -384,7 +388,8 @@ async def cross_modal_search(
         products = []
         for p in products_data:
             product = ProductDetail(**p)
-            product.image_url = get_image_url(int(product.product_id))
+            # Pass product_id directly - get_image_url handles conversion
+            product.image_url = get_image_url(product.product_id)
             product.similarity_score = p.get("score", 0.85)
             products.append(product)
 

@@ -14,8 +14,10 @@ router = APIRouter(prefix="/images", tags=["images"])
 # Use workspace client to get workspace host
 w = WorkspaceClient()
 
-# Get workspace host from environment or SDK config
-WORKSPACE_HOST = os.getenv("DATABRICKS_HOST") or w.config.host
+# Get workspace host for constructing Files API URLs
+WORKSPACE_HOST = os.getenv("DATABRICKS_WORKSPACE_URL", "")
+if WORKSPACE_HOST and not WORKSPACE_HOST.startswith("http"):
+    WORKSPACE_HOST = f"https://{WORKSPACE_HOST}"
 
 
 @router.get("/{image_path:path}")

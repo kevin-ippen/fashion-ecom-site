@@ -1565,6 +1565,629 @@ print("\n✅ Table is ready for Vector Search indexing")
 
 # COMMAND ----------
 
+# DBTITLE 1,🔍 Diagnose CLIP Endpoint Schema
+import mlflow
+import requests
+import base64
+from PIL import Image
+import io
+
+print("🔍 Diagnosing CLIP Endpoint Issues")
+print("="*80)
+print()
+
+# 1. Check model signature
+print("1️⃣  MODEL SIGNATURE")
+print("-" * 80)
+
+client = mlflow.tracking.MlflowClient()
+model_versions = client.search_model_versions(f"name='{UC_MODEL_NAME}'")
+latest_version = max(model_versions, key=lambda x: int(x.version))
+
+print(f"Model: {UC_MODEL_NAME}")
+print(f"Latest version: {latest_version.version}")
+print(f"Status: {latest_version.status}")
+print()
+
+# Get model info
+model_uri = f"models:/{UC_MODEL_NAME}/{latest_version.version}"
+model_info = mlflow.models.get_model_info(model_uri)
+
+print("Input Schema:")
+if model_info.signature and model_info.signature.inputs:
+    for input_col in model_info.signature.inputs.inputs:
+        print(f"  - {input_col.name}: {input_col.type}")
+else:
+    print("  ⚠️  No input schema found")
+
+print()
+print("Output Schema:")
+if model_info.signature and model_info.signature.outputs:
+    print(f"  {model_info.signature.outputs}")
+else:
+    print("  ⚠️  No output schema found")
+
+print()
+print("="*80)
+print("2️⃣  ENDPOINT TESTING")
+print("-" * 80)
+print()
+
+# Get credentials
+ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+api_url = ctx.apiUrl().get()
+api_token = ctx.apiToken().get()
+
+url = f"{api_url}/serving-endpoints/{ENDPOINT_NAME}/invocations"
+headers = {
+    "Authorization": f"Bearer {api_token}",
+    "Content-Type": "application/json"
+}
+
+# Test 1: Text input
+print("Test 1: Text Input")
+try:
+    payload = {"dataframe_records": [{"text": "red leather jacket"}]}
+    response = requests.post(url, json=payload, headers=headers, timeout=30)
+    
+    if response.status_code == 200:
+        result = response.json()
+        embedding = result["predictions"][0]
+        print(f"  ✅ SUCCESS - Generated {len(embedding)}-dim embedding")
+    else:
+        print(f"  ❌ FAILED - Status {response.status_code}")
+        print(f"  Error: {response.text}")
+except Exception as e:
+    print(f"  ❌ ERROR: {e}")
+
+print()
+
+# Test 2: Image input (base64)
+print("Test 2: Image Input (base64)")
+try:
+    # Create a simple test image
+    test_img = Image.new('RGB', (224, 224), color='red')
+    img_buffer = io.BytesIO()
+    test_img.save(img_buffer, format='PNG')
+    img_bytes = img_buffer.getvalue()
+    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+    
+    payload = {"dataframe_records": [{"image": img_b64}]}
+    response = requests.post(url, json=payload, headers=headers, timeout=30)
+    
+    if response.status_code == 200:
+        result = response.json()
+        embedding = result["predictions"][0]
+        print(f"  ✅ SUCCESS - Generated {len(embedding)}-dim embedding")
+    else:
+        print(f"  ❌ FAILED - Status {response.status_code}")
+        print(f"  Error: {response.text[:200]}...")
+except Exception as e:
+    print(f"  ❌ ERROR: {e}")
+
+print()
+print("="*80)
+print("3️⃣  DIAGNOSIS")
+print("-" * 80)
+print()
+
+if response.status_code != 200:
+    print("❌ ISSUE CONFIRMED: Endpoint does not accept image input")
+    print()
+    print("Root Cause:")
+    print("  The model signature only includes 'text' field, not 'image'")
+    print()
+    print("Solution: Re-register model with correct signature (see next cells)")
+else:
+    print("✅ Endpoint accepts both text and image inputs")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 📝 Application Code Fixes
+# MAGIC
+# MAGIC ### 🔴 Issue 1: Image Search - Wrong Input Schema
+# MAGIC
+# MAGIC **Error**: `Model is missing inputs ['text']. Note that there were extra inputs: ['image']`
+# MAGIC
+# MAGIC **Fix**: Update `services/clip_service.py`
+# MAGIC
+# MAGIC ```python
+# MAGIC # In get_image_embedding method
+# MAGIC async def get_image_embedding(self, image_bytes: bytes) -> List[float]:
+# MAGIC     """
+# MAGIC     Generate CLIP embedding for an image.
+# MAGIC     """
+# MAGIC     try:
+# MAGIC         # Convert image bytes to base64
+# MAGIC         image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+# MAGIC         
+# MAGIC         # IMPORTANT: Send as 'image' field, not 'text'
+# MAGIC         payload = {
+# MAGIC             "dataframe_records": [
+# MAGIC                 {"image": image_b64}  # ✅ Correct field name
+# MAGIC             ]
+# MAGIC         }
+# MAGIC         
+# MAGIC         async with aiohttp.ClientSession() as session:
+# MAGIC             async with session.post(
+# MAGIC                 self.endpoint_url,
+# MAGIC                 json=payload,
+# MAGIC                 headers=self.headers,
+# MAGIC                 timeout=aiohttp.ClientTimeout(total=30)
+# MAGIC             ) as response:
+# MAGIC                 if response.status != 200:
+# MAGIC                     error_text = await response.text()
+# MAGIC                     logger.error(f"CLIP endpoint error {response.status}: {error_text}")
+# MAGIC                     raise Exception(f"CLIP endpoint returned {response.status}")
+# MAGIC                 
+# MAGIC                 result = await response.json()
+# MAGIC                 embedding = result["predictions"][0]
+# MAGIC                 
+# MAGIC                 # Validate embedding
+# MAGIC                 if not isinstance(embedding, list) or len(embedding) != 512:
+# MAGIC                     raise ValueError(f"Invalid embedding dimension: {len(embedding)}")
+# MAGIC                 
+# MAGIC                 return embedding
+# MAGIC                 
+# MAGIC     except Exception as e:
+# MAGIC         logger.error(f"Error generating image embedding: {e}")
+# MAGIC         raise
+# MAGIC ```
+# MAGIC
+# MAGIC **Note**: If the endpoint still rejects image input after this fix, you'll need to re-register the model with the correct signature (see diagnosis cell above).
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ### 🟡 Issue 2: Text Search - Product ID Type Conversion
+# MAGIC
+# MAGIC **Error**: `ValueError: invalid literal for int() with base 10: '34029.0'`
+# MAGIC
+# MAGIC **Fix**: Update `routes/v1/search.py` (around line 73)
+# MAGIC
+# MAGIC ```python
+# MAGIC # Add this helper function at the top of the file
+# MAGIC def safe_product_id_to_int(product_id: any) -> int:
+# MAGIC     """
+# MAGIC     Safely convert product_id to int, handling string floats from Vector Search.
+# MAGIC     
+# MAGIC     Vector Search may return product_id as '34029.0' (string float)
+# MAGIC     instead of 34029 (int).
+# MAGIC     """
+# MAGIC     if isinstance(product_id, str):
+# MAGIC         # Handle '34029.0' -> 34029
+# MAGIC         return int(float(product_id))
+# MAGIC     elif isinstance(product_id, float):
+# MAGIC         return int(product_id)
+# MAGIC     else:
+# MAGIC         return int(product_id)
+# MAGIC
+# MAGIC # Then replace this line:
+# MAGIC # OLD: product.image_url = get_image_url(int(product.product_id))
+# MAGIC # NEW:
+# MAGIC product.image_url = get_image_url(safe_product_id_to_int(product.product_id))
+# MAGIC ```
+# MAGIC
+# MAGIC **Apply this fix in ALL search functions**:
+# MAGIC - `search_by_text()` (line ~73)
+# MAGIC - `search_by_image()` (if applicable)
+# MAGIC - `get_recommendations()` (if applicable)
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ### 🟢 Issue 3: Empty Vector Search Results
+# MAGIC
+# MAGIC **Warning**: `Unexpected Vector Search response format: {'result': {'row_count': 0}}`
+# MAGIC
+# MAGIC **Fix**: Update `services/vector_search_service.py`
+# MAGIC
+# MAGIC ```python
+# MAGIC # In similarity_search method, after calling index.similarity_search()
+# MAGIC
+# MAGIC result = index.similarity_search(
+# MAGIC     query_vector=query_vector,
+# MAGIC     columns=columns,
+# MAGIC     num_results=num_results,
+# MAGIC     filters=filters
+# MAGIC )
+# MAGIC
+# MAGIC # ✅ Add better error handling
+# MAGIC if "result" not in result:
+# MAGIC     logger.warning(f"Unexpected Vector Search response format: {result}")
+# MAGIC     return []
+# MAGIC
+# MAGIC if "data_array" not in result["result"]:
+# MAGIC     # Handle empty results gracefully
+# MAGIC     row_count = result["result"].get("row_count", 0)
+# MAGIC     if row_count == 0:
+# MAGIC         logger.info("Vector Search returned 0 results (no matches found)")
+# MAGIC         return []
+# MAGIC     else:
+# MAGIC         logger.warning(f"Unexpected result format: {result}")
+# MAGIC         return []
+# MAGIC
+# MAGIC data_array = result["result"]["data_array"]
+# MAGIC logger.info(f"✅ Vector Search returned {len(data_array)} results")
+# MAGIC
+# MAGIC return data_array
+# MAGIC ```
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ## 📝 Summary of Required Changes
+# MAGIC
+# MAGIC ### Files to Update:
+# MAGIC
+# MAGIC 1. **`services/clip_service.py`**
+# MAGIC    - ✅ Fix `get_image_embedding()` payload format
+# MAGIC    - ✅ Ensure `{"image": base64_string}` is sent, not `{"text": ...}`
+# MAGIC
+# MAGIC 2. **`routes/v1/search.py`**
+# MAGIC    - ✅ Add `safe_product_id_to_int()` helper function
+# MAGIC    - ✅ Replace all `int(product.product_id)` with `safe_product_id_to_int(product.product_id)`
+# MAGIC    - ✅ Apply to: `search_by_text()`, `search_by_image()`, `get_recommendations()`
+# MAGIC
+# MAGIC 3. **`services/vector_search_service.py`**
+# MAGIC    - ✅ Add empty result handling in `similarity_search()`
+# MAGIC    - ✅ Return empty list instead of crashing on unexpected format
+# MAGIC
+# MAGIC ### Testing Checklist:
+# MAGIC
+# MAGIC - [ ] Text search: `POST /api/v1/search/text` with query "party shirt"
+# MAGIC - [ ] Image search: `POST /api/v1/search/image` with uploaded image
+# MAGIC - [ ] Personalized recommendations: `GET /api/v1/search/recommendations/user_007598`
+# MAGIC - [ ] Empty results handling (search for nonsense query)
+# MAGIC - [ ] Product ID conversion (verify images load correctly)
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ## ⚠️ If Image Search Still Fails
+# MAGIC
+# MAGIC If the endpoint continues to reject image input after the code fix, the model signature needs to be updated. Run the diagnosis cell above to confirm, then:
+# MAGIC
+# MAGIC 1. Re-register the model with both `text` and `image` fields (optional)
+# MAGIC 2. Update the serving endpoint to the new version
+# MAGIC 3. Wait 5-10 minutes for deployment
+# MAGIC 4. Test again
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## ✅ Complete Solution: Two-Endpoint Architecture
+# MAGIC
+# MAGIC ### 🎯 Problem Summary
+# MAGIC
+# MAGIC **Issue 1**: `clip-multimodal-encoder` only accepts text input (not images)  
+# MAGIC **Issue 2**: Product IDs returned as string floats (`'34029.0'`)  
+# MAGIC **Issue 3**: Empty vector search results not handled gracefully
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ### 🔧 Solution: Use Two Separate Endpoints
+# MAGIC
+# MAGIC #### 1️⃣  Text Queries → `clip-multimodal-encoder`
+# MAGIC
+# MAGIC **Endpoint**: `clip-multimodal-encoder`  
+# MAGIC **Use Case**: Text search queries ("red leather jacket")  
+# MAGIC **Status**: ✅ Working  
+# MAGIC
+# MAGIC **Request Format**:
+# MAGIC ```json
+# MAGIC {
+# MAGIC   "dataframe_records": [
+# MAGIC     {"text": "red leather jacket"}
+# MAGIC   ]
+# MAGIC }
+# MAGIC ```
+# MAGIC
+# MAGIC **Response Format**:
+# MAGIC ```json
+# MAGIC {
+# MAGIC   "predictions": [
+# MAGIC     [0.013, 0.053, -0.026, ...]  // 512-dim array
+# MAGIC   ]
+# MAGIC }
+# MAGIC ```
+# MAGIC
+# MAGIC **Extract Embedding**: `result['predictions'][0]`
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC #### 2️⃣  Image Uploads → `clip-image-encoder`
+# MAGIC
+# MAGIC **Endpoint**: `clip-image-encoder`  
+# MAGIC **Use Case**: User-uploaded images  
+# MAGIC **Status**: ✅ Working (tested and validated)  
+# MAGIC
+# MAGIC **Request Format**:
+# MAGIC ```json
+# MAGIC {
+# MAGIC   "dataframe_records": [
+# MAGIC     {"image": "base64_encoded_image_string"}
+# MAGIC   ]
+# MAGIC }
+# MAGIC ```
+# MAGIC
+# MAGIC **Response Format**:
+# MAGIC ```json
+# MAGIC {
+# MAGIC   "predictions": [0.007, -0.016, -0.017, ...]  // Flat 512-dim array
+# MAGIC }
+# MAGIC ```
+# MAGIC
+# MAGIC **Extract Embedding**: `result['predictions']` (already flat)
+# MAGIC
+# MAGIC **Validation**:
+# MAGIC - ✅ Dimension: 512
+# MAGIC - ✅ L2 norm: 1.0 (normalized)
+# MAGIC - ✅ Response time: ~0.2s
+# MAGIC - ✅ Compatible with vector search indexes
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ### 📝 Code Updates Required
+# MAGIC
+# MAGIC #### File 1: `services/clip_service.py`
+# MAGIC
+# MAGIC ```python
+# MAGIC import aiohttp
+# MAGIC import base64
+# MAGIC from typing import List
+# MAGIC import logging
+# MAGIC
+# MAGIC logger = logging.getLogger(__name__)
+# MAGIC
+# MAGIC class CLIPService:
+# MAGIC     def __init__(self, workspace_url: str, token: str):
+# MAGIC         self.workspace_url = workspace_url
+# MAGIC         self.token = token
+# MAGIC         
+# MAGIC         # Two separate endpoints
+# MAGIC         self.text_endpoint = 'clip-multimodal-encoder'
+# MAGIC         self.image_endpoint = 'clip-image-encoder'
+# MAGIC         
+# MAGIC         self.text_url = f'{workspace_url}/serving-endpoints/{self.text_endpoint}/invocations'
+# MAGIC         self.image_url = f'{workspace_url}/serving-endpoints/{self.image_endpoint}/invocations'
+# MAGIC         
+# MAGIC         self.headers = {
+# MAGIC             'Authorization': f'Bearer {token}',
+# MAGIC             'Content-Type': 'application/json'
+# MAGIC         }
+# MAGIC         
+# MAGIC         logger.info(f"CLIPService initialized")
+# MAGIC         logger.info(f"  Text endpoint: {self.text_endpoint}")
+# MAGIC         logger.info(f"  Image endpoint: {self.image_endpoint}")
+# MAGIC     
+# MAGIC     async def get_text_embedding(self, text: str) -> List[float]:
+# MAGIC         """
+# MAGIC         Generate CLIP embedding for text query.
+# MAGIC         
+# MAGIC         Args:
+# MAGIC             text: Search query text
+# MAGIC             
+# MAGIC         Returns:
+# MAGIC             512-dimensional embedding as list of floats
+# MAGIC         """
+# MAGIC         try:
+# MAGIC             payload = {'dataframe_records': [{'text': text}]}
+# MAGIC             
+# MAGIC             async with aiohttp.ClientSession() as session:
+# MAGIC                 async with session.post(
+# MAGIC                     self.text_url,
+# MAGIC                     json=payload,
+# MAGIC                     headers=self.headers,
+# MAGIC                     timeout=aiohttp.ClientTimeout(total=30)
+# MAGIC                 ) as response:
+# MAGIC                     if response.status != 200:
+# MAGIC                         error_text = await response.text()
+# MAGIC                         logger.error(f"Text endpoint error {response.status}: {error_text}")
+# MAGIC                         raise Exception(f"CLIP text endpoint returned {response.status}")
+# MAGIC                     
+# MAGIC                     result = await response.json()
+# MAGIC                     embedding = result['predictions'][0]  # Extract from nested array
+# MAGIC                     
+# MAGIC                     # Validate
+# MAGIC                     if not isinstance(embedding, list) or len(embedding) != 512:
+# MAGIC                         raise ValueError(f"Invalid embedding dimension: {len(embedding)}")
+# MAGIC                     
+# MAGIC                     logger.info(f"✅ Generated text embedding: dim={len(embedding)}")
+# MAGIC                     return embedding
+# MAGIC                     
+# MAGIC         except Exception as e:
+# MAGIC             logger.error(f"Error generating text embedding: {e}")
+# MAGIC             raise
+# MAGIC     
+# MAGIC     async def get_image_embedding(self, image_bytes: bytes) -> List[float]:
+# MAGIC         """
+# MAGIC         Generate CLIP embedding for uploaded image.
+# MAGIC         
+# MAGIC         Args:
+# MAGIC             image_bytes: Raw image bytes
+# MAGIC             
+# MAGIC         Returns:
+# MAGIC             512-dimensional embedding as list of floats
+# MAGIC         """
+# MAGIC         try:
+# MAGIC             # Convert to base64
+# MAGIC             image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+# MAGIC             payload = {'dataframe_records': [{'image': image_b64}]}
+# MAGIC             
+# MAGIC             logger.info(f"Calling image endpoint (size: {len(image_bytes)} bytes)")
+# MAGIC             
+# MAGIC             async with aiohttp.ClientSession() as session:
+# MAGIC                 async with session.post(
+# MAGIC                     self.image_url,
+# MAGIC                     json=payload,
+# MAGIC                     headers=self.headers,
+# MAGIC                     timeout=aiohttp.ClientTimeout(total=30)
+# MAGIC                 ) as response:
+# MAGIC                     if response.status != 200:
+# MAGIC                         error_text = await response.text()
+# MAGIC                         logger.error(f"Image endpoint error {response.status}: {error_text}")
+# MAGIC                         raise Exception(f"CLIP image endpoint returned {response.status}")
+# MAGIC                     
+# MAGIC                     result = await response.json()
+# MAGIC                     # IMPORTANT: clip-image-encoder returns flat array
+# MAGIC                     embedding = result['predictions']
+# MAGIC                     
+# MAGIC                     # Validate
+# MAGIC                     if not isinstance(embedding, list) or len(embedding) != 512:
+# MAGIC                         raise ValueError(f"Invalid embedding dimension: {len(embedding)}")
+# MAGIC                     
+# MAGIC                     logger.info(f"✅ Generated image embedding: dim={len(embedding)}")
+# MAGIC                     return embedding
+# MAGIC                     
+# MAGIC         except Exception as e:
+# MAGIC             logger.error(f"Error generating image embedding: {e}")
+# MAGIC             raise
+# MAGIC ```
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC #### File 2: `routes/v1/search.py`
+# MAGIC
+# MAGIC **Fix product_id type conversion**:
+# MAGIC
+# MAGIC ```python
+# MAGIC # Add helper function at top of file
+# MAGIC def safe_product_id_to_int(product_id) -> int:
+# MAGIC     """
+# MAGIC     Safely convert product_id to int, handling string floats.
+# MAGIC     Vector Search may return '34029.0' instead of 34029.
+# MAGIC     """
+# MAGIC     if isinstance(product_id, str):
+# MAGIC         return int(float(product_id))
+# MAGIC     elif isinstance(product_id, float):
+# MAGIC         return int(product_id)
+# MAGIC     return int(product_id)
+# MAGIC
+# MAGIC # Replace ALL instances of:
+# MAGIC # int(product.product_id)
+# MAGIC # With:
+# MAGIC # safe_product_id_to_int(product.product_id)
+# MAGIC
+# MAGIC # Example in search_by_text:
+# MAGIC @router.post("/text")
+# MAGIC async def search_by_text(request: TextSearchRequest):
+# MAGIC     try:
+# MAGIC         # ... existing code ...
+# MAGIC         
+# MAGIC         for product in products:
+# MAGIC             # OLD: product.image_url = get_image_url(int(product.product_id))
+# MAGIC             # NEW:
+# MAGIC             product.image_url = get_image_url(safe_product_id_to_int(product.product_id))
+# MAGIC         
+# MAGIC         return products
+# MAGIC     except Exception as e:
+# MAGIC         logger.error(f"Text search error: {e}")
+# MAGIC         raise HTTPException(status_code=500, detail=str(e))
+# MAGIC ```
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC #### File 3: `services/vector_search_service.py`
+# MAGIC
+# MAGIC **Fix empty result handling**:
+# MAGIC
+# MAGIC ```python
+# MAGIC def similarity_search(self, index_name: str, query_vector: List[float], 
+# MAGIC                      columns: List[str], num_results: int = 20,
+# MAGIC                      filters: dict = None) -> List[dict]:
+# MAGIC     """
+# MAGIC     Perform similarity search on vector index.
+# MAGIC     """
+# MAGIC     try:
+# MAGIC         index = self.get_index(index_name)
+# MAGIC         
+# MAGIC         result = index.similarity_search(
+# MAGIC             query_vector=query_vector,
+# MAGIC             columns=columns,
+# MAGIC             num_results=num_results,
+# MAGIC             filters=filters
+# MAGIC         )
+# MAGIC         
+# MAGIC         # Handle empty or unexpected results
+# MAGIC         if "result" not in result:
+# MAGIC             logger.warning(f"Unexpected response format: {result}")
+# MAGIC             return []
+# MAGIC         
+# MAGIC         if "data_array" not in result["result"]:
+# MAGIC             row_count = result["result"].get("row_count", 0)
+# MAGIC             if row_count == 0:
+# MAGIC                 logger.info("Vector Search returned 0 results")
+# MAGIC                 return []
+# MAGIC             else:
+# MAGIC                 logger.warning(f"Unexpected result format: {result}")
+# MAGIC                 return []
+# MAGIC         
+# MAGIC         data_array = result["result"]["data_array"]
+# MAGIC         logger.info(f"✅ Vector Search returned {len(data_array)} results")
+# MAGIC         
+# MAGIC         return data_array
+# MAGIC         
+# MAGIC     except Exception as e:
+# MAGIC         logger.error(f"Vector search error: {e}")
+# MAGIC         raise
+# MAGIC ```
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ### 🧪 Testing Checklist
+# MAGIC
+# MAGIC - [ ] **Text search**: `POST /api/v1/search/text` with `{"query": "party shirt", "limit": 20}`
+# MAGIC - [ ] **Image search**: `POST /api/v1/search/image` with uploaded image file
+# MAGIC - [ ] **Recommendations**: `GET /api/v1/search/recommendations/user_007598?limit=8`
+# MAGIC - [ ] **Empty results**: Search for nonsense query, verify no crash
+# MAGIC - [ ] **Product images**: Verify product images load correctly (product_id conversion)
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ### 📊 Endpoint Comparison
+# MAGIC
+# MAGIC | Feature | clip-multimodal-encoder | clip-image-encoder |
+# MAGIC |---------|------------------------|--------------------|
+# MAGIC | **Text Input** | ✅ Yes | ❌ No |
+# MAGIC | **Image Input** | ❌ No | ✅ Yes |
+# MAGIC | **Output Format** | Nested array | Flat array |
+# MAGIC | **Dimension** | 512 | 512 |
+# MAGIC | **Normalized** | Yes (L2=1.0) | Yes (L2=1.0) |
+# MAGIC | **Response Time** | ~0.2s | ~0.2s |
+# MAGIC | **Use Case** | Text queries | Image uploads |
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ### ✅ Summary
+# MAGIC
+# MAGIC **What Works**:
+# MAGIC - ✅ Text search via `clip-multimodal-encoder`
+# MAGIC - ✅ Image upload via `clip-image-encoder`
+# MAGIC - ✅ Both return 512-dim normalized embeddings
+# MAGIC - ✅ Compatible with existing vector search indexes
+# MAGIC
+# MAGIC **What's Fixed**:
+# MAGIC - ✅ Image endpoint identified and tested
+# MAGIC - ✅ Product ID conversion handled
+# MAGIC - ✅ Empty results handled gracefully
+# MAGIC
+# MAGIC **Action Required**:
+# MAGIC 1. Update `clip_service.py` with two-endpoint logic
+# MAGIC 2. Update `search.py` with `safe_product_id_to_int()`
+# MAGIC 3. Update `vector_search_service.py` with empty result handling
+# MAGIC 4. Test all search endpoints
+# MAGIC 5. Deploy to production
+# MAGIC
+# MAGIC ---
+# MAGIC
+# MAGIC ### 🔗 Endpoint URLs
+# MAGIC
+# MAGIC **Text Endpoint**:  
+# MAGIC `https://adb-984752964297111.11.azuredatabricks.net/serving-endpoints/clip-multimodal-encoder/invocations`
+# MAGIC
+# MAGIC **Image Endpoint**:  
+# MAGIC `https://adb-984752964297111.11.azuredatabricks.net/serving-endpoints/clip-image-encoder/invocations`
+
+# COMMAND ----------
+
 # DBTITLE 1,Generate Delta Table Sync Command
 print("🔧 Delta table optimization for Vector Search...")
 print()
@@ -2175,3 +2798,126 @@ print("💾 Save this configuration for your app deployment")
 # MAGIC - Tables: Query `main.fashion_demo.product_embeddings_multimodal`
 # MAGIC
 # MAGIC **Questions?** Check the implementation summary document for details!
+
+# COMMAND ----------
+
+import mlflow
+import requests
+import base64
+from PIL import Image
+import io
+
+print("🔍 Diagnosing CLIP Endpoint Issues")
+print("="*80)
+print()
+
+# 1. Check model signature
+print("1️⃣  MODEL SIGNATURE")
+print("-" * 80)
+
+client = mlflow.tracking.MlflowClient()
+model_versions = client.search_model_versions(f"name='{UC_MODEL_NAME}'")
+latest_version = max(model_versions, key=lambda x: int(x.version))
+
+print(f"Model: {UC_MODEL_NAME}")
+print(f"Latest version: {latest_version.version}")
+print(f"Status: {latest_version.status}")
+print()
+
+# Get model info
+model_uri = f"models:/{UC_MODEL_NAME}/{latest_version.version}"
+model_info = mlflow.models.get_model_info(model_uri)
+
+print("Input Schema:")
+if model_info.signature and model_info.signature.inputs:
+    for input_col in model_info.signature.inputs.inputs:
+        print(f"  - {input_col.name}: {input_col.type}")
+else:
+    print("  ⚠️  No input schema found")
+
+print()
+print("Output Schema:")
+if model_info.signature and model_info.signature.outputs:
+    print(f"  {model_info.signature.outputs}")
+else:
+    print("  ⚠️  No output schema found")
+
+print()
+print("="*80)
+print("2️⃣  ENDPOINT TESTING")
+print("-" * 80)
+print()
+
+# Get credentials
+ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+api_url = ctx.apiUrl().get()
+api_token = ctx.apiToken().get()
+
+url = f"{api_url}/serving-endpoints/{ENDPOINT_NAME}/invocations"
+headers = {
+    "Authorization": f"Bearer {api_token}",
+    "Content-Type": "application/json"
+}
+
+# Test 1: Text input
+print("Test 1: Text Input")
+try:
+    payload = {"dataframe_records": [{"text": "red leather jacket"}]}
+    response = requests.post(url, json=payload, headers=headers, timeout=30)
+    
+    if response.status_code == 200:
+        result = response.json()
+        embedding = result["predictions"][0]
+        print(f"  ✅ SUCCESS - Generated {len(embedding)}-dim embedding")
+    else:
+        print(f"  ❌ FAILED - Status {response.status_code}")
+        print(f"  Error: {response.text}")
+except Exception as e:
+    print(f"  ❌ ERROR: {e}")
+
+print()
+
+# Test 2: Image input (base64)
+print("Test 2: Image Input (base64)")
+try:
+    # Get a sample product image
+    sample = spark.table(PRODUCTS_TABLE).filter(F.col("image_path").isNotNull()).first()
+    
+    # For testing, create a simple test image
+    test_img = Image.new('RGB', (224, 224), color='red')
+    img_buffer = io.BytesIO()
+    test_img.save(img_buffer, format='PNG')
+    img_bytes = img_buffer.getvalue()
+    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+    
+    payload = {"dataframe_records": [{"image": img_b64}]}
+    response = requests.post(url, json=payload, headers=headers, timeout=30)
+    
+    if response.status_code == 200:
+        result = response.json()
+        embedding = result["predictions"][0]
+        print(f"  ✅ SUCCESS - Generated {len(embedding)}-dim embedding")
+    else:
+        print(f"  ❌ FAILED - Status {response.status_code}")
+        print(f"  Error: {response.text}")
+except Exception as e:
+    print(f"  ❌ ERROR: {e}")
+
+print()
+print("="*80)
+print("3️⃣  DIAGNOSIS")
+print("-" * 80)
+print()
+
+if response.status_code != 200:
+    print("❌ ISSUE CONFIRMED: Endpoint does not accept image input")
+    print()
+    print("Root Cause:")
+    print("  The model signature only includes 'text' field, not 'image'")
+    print()
+    print("Solution Options:")
+    print("  A. Re-register model with correct signature (RECOMMENDED)")
+    print("  B. Update app to use text-only endpoint and pre-compute image embeddings")
+    print()
+else:
+    print("✅ Endpoint accepts both text and image inputs")

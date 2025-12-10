@@ -13,7 +13,7 @@ from core.database import get_async_db
 router = APIRouter(prefix="/users", tags=["users"])
 
 # Get workspace host for constructing Files API URLs
-WORKSPACE_HOST = os.getenv("DATABRICKS_HOST", "")
+WORKSPACE_HOST = os.getenv("DATABRICKS_WORKSPACE_URL", "")
 if WORKSPACE_HOST and not WORKSPACE_HOST.startswith("http"):
     WORKSPACE_HOST = f"https://{WORKSPACE_HOST}"
 

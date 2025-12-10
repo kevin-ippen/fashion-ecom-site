@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     
     @property
     def EMBEDDINGS_TABLE(self) -> str:
-        return self.LAKEBASE_EMBEDDINGS_TABLE
+        return self.UC_MULTIMODAL_TABLE
     
     @property
     def USER_FEATURES_TABLE(self) -> str:

@@ -136,21 +136,34 @@ class VectorSearchService:
 
             results = await loop.run_in_executor(None, do_search)
 
-            # Parse results
-            if "result" in results and "data_array" in results["result"]:
-                data_array = results["result"]["data_array"]
-                logger.info(f"✅ Vector Search returned {len(data_array)} results")
-
-                # Convert to list of dicts
-                products = []
-                for row in data_array:
-                    product = dict(zip(columns, row))
-                    products.append(product)
-
-                return products
-            else:
-                logger.warning(f"Unexpected Vector Search response format: {results}")
+            # Parse results with improved error handling
+            if "result" not in results:
+                logger.warning(f"Unexpected Vector Search response format (missing 'result'): {results}")
                 return []
+
+            result = results["result"]
+
+            # Check if data_array exists
+            if "data_array" not in result:
+                # Handle empty results gracefully
+                row_count = result.get("row_count", 0)
+                if row_count == 0:
+                    logger.info("✅ Vector Search returned 0 results (no matches found)")
+                    return []
+                else:
+                    logger.warning(f"Unexpected result format (missing 'data_array'): {results}")
+                    return []
+
+            data_array = result["data_array"]
+            logger.info(f"✅ Vector Search returned {len(data_array)} results")
+
+            # Convert to list of dicts
+            products = []
+            for row in data_array:
+                product = dict(zip(columns, row))
+                products.append(product)
+
+            return products
 
         except Exception as e:
             logger.error(f"Vector Search error: {type(e).__name__}: {e}")

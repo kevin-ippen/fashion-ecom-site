@@ -1,6 +1,7 @@
 """
 CLIP Multimodal Model Serving service for generating TEXT and IMAGE embeddings
-Endpoint: clip-multimodal-encoder (supports both text and images)
+Text Endpoint: clip-multimodal-encoder (for text queries)
+Image Endpoint: clip-image-encoder (for user-uploaded images)
 Dimension: 512 (ViT-B/32)
 """
 import base64
@@ -13,15 +14,25 @@ logger = logging.getLogger(__name__)
 
 
 class CLIPService:
-    """Service for interacting with CLIP multimodal model serving endpoint"""
+    """Service for interacting with CLIP model serving endpoints"""
 
     def __init__(self):
-        self.endpoint_url = settings.CLIP_ENDPOINT_URL
+        # Two separate endpoints for text and image
+        self.text_endpoint_name = "clip-multimodal-encoder"
+        self.image_endpoint_name = "clip-image-encoder"
+        
+        # Construct URLs
+        base_url = settings.DATABRICKS_WORKSPACE_URL.rstrip('/')
+        self.text_endpoint_url = f"{base_url}/serving-endpoints/{self.text_endpoint_name}/invocations"
+        self.image_endpoint_url = f"{base_url}/serving-endpoints/{self.image_endpoint_name}/invocations"
+        
         self.embedding_dim = settings.CLIP_EMBEDDING_DIM
 
         logger.info(f"🔧 CLIPService initialized")
-        logger.info(f"   Endpoint: {settings.CLIP_ENDPOINT_NAME}")
-        logger.info(f"   URL: {self.endpoint_url}")
+        logger.info(f"   Text Endpoint: {self.text_endpoint_name}")
+        logger.info(f"   Text URL: {self.text_endpoint_url}")
+        logger.info(f"   Image Endpoint: {self.image_endpoint_name}")
+        logger.info(f"   Image URL: {self.image_endpoint_url}")
         logger.info(f"   Dimension: {self.embedding_dim}")
 
     def _get_auth_headers(self) -> dict:
@@ -34,7 +45,7 @@ class CLIPService:
 
     async def get_text_embedding(self, text: str) -> np.ndarray:
         """
-        Generate CLIP embedding for text
+        Generate CLIP embedding for text using clip-multimodal-encoder
 
         Args:
             text: Text string to encode
@@ -50,25 +61,26 @@ class CLIPService:
                 "dataframe_records": [{"text": text}]
             }
 
-            logger.info(f"Calling CLIP endpoint for text embedding: '{text[:100]}...'")
+            logger.info(f"Calling CLIP text endpoint: '{text[:100]}...'")
 
             # Call Model Serving endpoint (longer timeout for cold starts)
             timeout = aiohttp.ClientTimeout(total=120)  # 2 minutes for cold starts
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
-                    self.endpoint_url,
+                    self.text_endpoint_url,
                     json=payload,
                     headers=self._get_auth_headers()
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        logger.error(f"CLIP endpoint error {response.status}: {error_text}")
-                        raise Exception(f"CLIP endpoint returned {response.status}")
+                        logger.error(f"CLIP text endpoint error {response.status}: {error_text}")
+                        raise Exception(f"CLIP text endpoint returned {response.status}")
 
                     result = await response.json()
 
             # Parse and normalize embedding
-            embedding = self._parse_embedding(result)
+            # clip-multimodal-encoder returns: {"predictions": [[0.01, 0.02, ...]]}
+            embedding = self._parse_embedding(result, is_nested=True)
             logger.info(f"✅ Generated text embedding: shape={embedding.shape}, norm={np.linalg.norm(embedding):.4f}")
 
             return embedding
@@ -79,7 +91,7 @@ class CLIPService:
 
     async def get_image_embedding(self, image_bytes: bytes) -> np.ndarray:
         """
-        Generate CLIP embedding for an image
+        Generate CLIP embedding for an image using clip-image-encoder
 
         Args:
             image_bytes: Raw image bytes (JPEG, PNG, etc.)
@@ -98,25 +110,26 @@ class CLIPService:
                 "dataframe_records": [{"image": image_b64}]
             }
 
-            logger.info(f"Calling CLIP endpoint for image embedding (size: {len(image_bytes)} bytes)")
+            logger.info(f"Calling CLIP image endpoint (size: {len(image_bytes)} bytes)")
 
             # Call Model Serving endpoint (longer timeout for cold starts)
             timeout = aiohttp.ClientTimeout(total=120)  # 2 minutes for cold starts
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
-                    self.endpoint_url,
+                    self.image_endpoint_url,
                     json=payload,
                     headers=self._get_auth_headers()
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        logger.error(f"CLIP endpoint error {response.status}: {error_text}")
-                        raise Exception(f"CLIP endpoint returned {response.status}")
+                        logger.error(f"CLIP image endpoint error {response.status}: {error_text}")
+                        raise Exception(f"CLIP image endpoint returned {response.status}")
 
                     result = await response.json()
 
             # Parse and normalize embedding
-            embedding = self._parse_embedding(result)
+            # clip-image-encoder returns: {"predictions": [0.01, 0.02, ...]} (flat array)
+            embedding = self._parse_embedding(result, is_nested=False)
             logger.info(f"✅ Generated image embedding: shape={embedding.shape}, norm={np.linalg.norm(embedding):.4f}")
 
             return embedding
@@ -171,28 +184,37 @@ class CLIPService:
         logger.info(f"✅ Generated hybrid embedding: text_weight={text_weight}, norm={norm:.4f}")
         return combined
 
-    def _parse_embedding(self, result: Union[dict, list]) -> np.ndarray:
+    def _parse_embedding(self, result: Union[dict, list], is_nested: bool = True) -> np.ndarray:
         """
         Parse embedding from CLIP endpoint response
 
+        Args:
+            result: Response from CLIP endpoint
+            is_nested: True if predictions are nested [[...]], False if flat [...]
+
         Handles multiple response formats:
-        - {'predictions': [[0.01, 0.02, ...]]} (nested)
-        - {'predictions': [0.01, 0.02, ...]} (flat)
-        - [[0.01, 0.02, ...]] (direct nested)
-        - [0.01, 0.02, ...] (direct flat)
+        - clip-multimodal-encoder: {'predictions': [[0.01, 0.02, ...]]} (nested)
+        - clip-image-encoder: {'predictions': [0.01, 0.02, ...]} (flat)
         """
         embedding = None
 
         if isinstance(result, dict) and "predictions" in result:
             predictions = result["predictions"]
             if isinstance(predictions, list) and len(predictions) > 0:
-                # Check if it's a flat array or nested
-                if isinstance(predictions[0], (int, float)):
-                    # Flat array: [0.0121, 0.0134, ...]
-                    embedding = np.array(predictions, dtype=np.float32)
-                elif isinstance(predictions[0], list):
+                if is_nested:
                     # Nested array: [[0.0121, 0.0134, ...]]
-                    embedding = np.array(predictions[0], dtype=np.float32)
+                    if isinstance(predictions[0], list):
+                        embedding = np.array(predictions[0], dtype=np.float32)
+                    else:
+                        # Fallback: treat as flat
+                        embedding = np.array(predictions, dtype=np.float32)
+                else:
+                    # Flat array: [0.0121, 0.0134, ...]
+                    if isinstance(predictions[0], (int, float)):
+                        embedding = np.array(predictions, dtype=np.float32)
+                    elif isinstance(predictions[0], list):
+                        # Fallback: treat as nested
+                        embedding = np.array(predictions[0], dtype=np.float32)
         elif isinstance(result, list):
             # Direct array format
             if len(result) > 0:
