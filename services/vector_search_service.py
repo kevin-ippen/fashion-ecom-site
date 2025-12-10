@@ -119,8 +119,7 @@ class VectorSearchService:
                     "gender",
                     "season",
                     "usage",
-                    "year",
-                    "score"  # ← CRITICAL: Similarity score from Vector Search!
+                    "year"
                 ]
 
             # Perform similarity search (sync call, wrap in executor)
@@ -159,9 +158,19 @@ class VectorSearchService:
             logger.info(f"✅ Vector Search returned {len(data_array)} results")
 
             # Convert to list of dicts
+            # Vector Search automatically appends the score as the LAST element in each row
             products = []
             for row in data_array:
-                product = dict(zip(columns, row))
+                # Check if row has more elements than requested columns (score is appended)
+                if len(row) > len(columns):
+                    # Last element is the similarity score
+                    product = dict(zip(columns, row[:-1]))
+                    product["score"] = row[-1]  # Add score separately
+                else:
+                    # No score in response (shouldn't happen with similarity_search)
+                    product = dict(zip(columns, row))
+                    logger.warning(f"No score found in Vector Search result row")
+
                 products.append(product)
 
             return products
