@@ -160,18 +160,34 @@ class VectorSearchService:
             # Convert to list of dicts
             # Vector Search automatically appends the score as the LAST element in each row
             products = []
-            for row in data_array:
+            for i, row in enumerate(data_array):
                 # Check if row has more elements than requested columns (score is appended)
                 if len(row) > len(columns):
                     # Last element is the similarity score
                     product = dict(zip(columns, row[:-1]))
                     product["score"] = row[-1]  # Add score separately
+
+                    # Debug logging for first result
+                    if i == 0:
+                        logger.info(f"📊 First result score debugging:")
+                        logger.info(f"   Row length: {len(row)}, Columns: {len(columns)}")
+                        logger.info(f"   Last element (score): {row[-1]} (type: {type(row[-1])})")
+                        logger.info(f"   Product dict keys: {list(product.keys())}")
                 else:
                     # No score in response (shouldn't happen with similarity_search)
                     product = dict(zip(columns, row))
-                    logger.warning(f"No score found in Vector Search result row")
+                    logger.warning(f"⚠️  Row {i}: No score found! Row length={len(row)}, Columns={len(columns)}")
+                    logger.warning(f"   Row: {row}")
 
                 products.append(product)
+
+            # Log score statistics
+            if products:
+                scores = [p.get("score") for p in products if "score" in p]
+                if scores:
+                    logger.info(f"📈 Score statistics: min={min(scores):.4f}, max={max(scores):.4f}, unique={len(set(scores))}")
+                else:
+                    logger.warning(f"⚠️  No scores found in any of the {len(products)} products!")
 
             return products
 
