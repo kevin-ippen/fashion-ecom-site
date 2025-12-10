@@ -35,17 +35,34 @@ class Settings(BaseSettings):
     LAKEBASE_SCHEMA: str = "fashion_demo"
     LAKEBASE_PRODUCTS_TABLE: str = "productsdb"
     LAKEBASE_USERS_TABLE: str = "usersdb"
-    LAKEBASE_EMBEDDINGS_TABLE: str = "product_image_embeddingsdb"
     LAKEBASE_USER_FEATURES_TABLE: str = "user_style_featuresdb"
-    
-    # CLIP Model Serving
-    CLIP_ENDPOINT: str = "clip-image-encoder"
+
+    # Unity Catalog - Source Tables (for embeddings)
+    UC_MULTIMODAL_TABLE: str = "main.fashion_demo.product_embeddings_multimodal"
+
+    # Databricks Workspace
+    DATABRICKS_WORKSPACE_URL: str = os.getenv(
+        "DATABRICKS_WORKSPACE_URL",
+        "https://adb-984752964297111.11.azuredatabricks.net"
+    )
+
+    # CLIP Multimodal Model Serving
+    CLIP_ENDPOINT_NAME: str = "clip-multimodal-encoder"
+    CLIP_UC_MODEL: str = "main.fashion_demo.clip_multimodal_encoder"
     CLIP_EMBEDDING_DIM: int = 512
 
-    # Vector Search
+    # Vector Search Endpoint
     VS_ENDPOINT_NAME: str = "fashion_vector_search"
-    VS_ENDPOINT_ID: str = "4d329fc8-1924-4131-ace8-14b542f8c14b"
-    VS_INDEX_NAME: str = "main.fashion_demo.product_embeddings_index"
+
+    # Vector Search Indexes (3 indexes for different search types)
+    VS_IMAGE_INDEX: str = "main.fashion_demo.vs_image_search"
+    VS_TEXT_INDEX: str = "main.fashion_demo.vs_text_search"
+    VS_HYBRID_INDEX: str = "main.fashion_demo.vs_hybrid_search"
+
+    @property
+    def CLIP_ENDPOINT_URL(self) -> str:
+        """Full URL to CLIP model serving endpoint"""
+        return f"{self.DATABRICKS_WORKSPACE_URL}/serving-endpoints/{self.CLIP_ENDPOINT_NAME}/invocations"
 
     # Aliases for backward compatibility (without LAKEBASE_ prefix)
     @property
@@ -63,9 +80,6 @@ class Settings(BaseSettings):
     @property
     def USER_FEATURES_TABLE(self) -> str:
         return self.LAKEBASE_USER_FEATURES_TABLE
-
-    # Model Serving
-    CLIP_ENDPOINT: Optional[str] = os.getenv("CLIP_ENDPOINT")
 
     # API
     API_PREFIX: str = "/api"
