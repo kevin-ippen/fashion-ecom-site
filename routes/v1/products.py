@@ -18,12 +18,24 @@ if WORKSPACE_HOST and not WORKSPACE_HOST.startswith("http"):
     WORKSPACE_HOST = f"https://{WORKSPACE_HOST}"
 
 
-def get_image_url(product_id: int) -> str:
+def get_image_url(product_id) -> str:
     """
     Construct direct Files API URL for product image
     Pattern: https://{workspace-host}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{product_id}.jpg
+
+    Args:
+        product_id: Product ID (int, float, or string)
     """
-    return f"{WORKSPACE_HOST}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{product_id}.jpg"
+    # Safe conversion: handles int, float, or string (including '34029.0')
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        pid = int(float(product_id))
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid product_id format: {product_id}, using as-is")
+        pid = product_id
+
+    return f"{WORKSPACE_HOST}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{pid}.jpg"
 
 
 @router.get("", response_model=ProductListResponse)
@@ -82,7 +94,7 @@ async def list_products(
     for p in products_data:
         product = ProductDetail(**p)
         # Use direct Files API URL instead of proxying through /api/v1/images
-        product.image_url = get_image_url(int(product.product_id))
+        product.image_url = get_image_url(product.product_id)
         products.append(product)
 
     return ProductListResponse(
@@ -117,7 +129,7 @@ async def get_product(
 
     product = ProductDetail(**product_data)
     # Use direct Files API URL instead of proxying through /api/v1/images
-    product.image_url = get_image_url(product_id_int)
+    product.image_url = get_image_url(product.product_id)
 
     return product
 

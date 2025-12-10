@@ -119,7 +119,8 @@ class VectorSearchService:
                     "gender",
                     "season",
                     "usage",
-                    "year"
+                    "year",
+                    "score"  # ← CRITICAL: Similarity score from Vector Search!
                 ]
 
             # Perform similarity search (sync call, wrap in executor)
