@@ -115,9 +115,10 @@ async def get_product(
     repo = LakebaseRepository(db)
     
     # Convert product_id to int since the database column is INTEGER
+    # Handle float strings like "14880.0" by converting through float first
     try:
-        product_id_int = int(product_id)
-    except ValueError:
+        product_id_int = int(float(product_id))
+    except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail=f"Invalid product_id: {product_id}")
     
     product_data = await repo.get_product_by_id(product_id_int)
