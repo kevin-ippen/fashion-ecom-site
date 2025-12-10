@@ -207,24 +207,38 @@ async def get_recommendations(
                 filters["master_category"] = persona["preferred_categories"]
                 logger.info(f"Restricting to categories: {persona['preferred_categories']}")
 
-            if restrict_price:
+            # Only add price filter if we have valid price data
+            if restrict_price and persona.get("p25_price") and persona.get("p75_price"):
                 min_price = persona["p25_price"] * 0.8
                 max_price = persona["p75_price"] * 1.2
                 filters["price"] = {"$gte": min_price, "$lte": max_price}
                 logger.info(f"Restricting to price range: ${min_price:.0f}-${max_price:.0f}")
+            else:
+                logger.info("Skipping price filter (no valid price data)")
 
             if restrict_color and persona.get("color_prefs"):
                 filters["base_color"] = persona["color_prefs"]
                 logger.info(f"Restricting to colors: {persona['color_prefs']}")
 
-            # Search hybrid index with flexible filters
+            # Try with filters first
+            logger.info(f"Attempting vector search with filters: {filters}")
             products_data = await vector_search_service.search_hybrid(
                 query_vector=user_embedding,
-                num_results=limit * 2,  # Get more for additional filtering
-                filters=filters if filters else None  # None = no restrictions
+                num_results=limit * 2,
+                filters=filters if filters else None
             )
 
             logger.info(f"✅ Hybrid Vector Search returned {len(products_data)} products")
+
+            # If no results with filters, try without filters
+            if len(products_data) == 0 and filters:
+                logger.warning("No results with filters, retrying without filters...")
+                products_data = await vector_search_service.search_hybrid(
+                    query_vector=user_embedding,
+                    num_results=limit * 2,
+                    filters=None
+                )
+                logger.info(f"✅ Vector Search without filters returned {len(products_data)} products")
 
         else:
             # Fallback to rule-based if no user embedding
@@ -237,7 +251,7 @@ async def get_recommendations(
         # Fallback: Rule-based recommendations
         filters = {}
 
-        if restrict_price:
+        if restrict_price and persona.get("p25_price") and persona.get("p75_price"):
             filters["min_price"] = persona["p25_price"] * 0.8
             filters["max_price"] = persona["p75_price"] * 1.2
 
@@ -280,12 +294,13 @@ async def get_recommendations(
         if color_match:
             rule_score += 0.4
         
-        # Price match bonus
-        price_diff = abs(p["price"] - persona["avg_price"])
-        price_range = persona["max_price"] - persona["min_price"]
-        if price_range > 0:
-            price_score = 1 - (price_diff / price_range)
-            rule_score += 0.3 * max(0, price_score)
+        # Price match bonus (only if we have valid price data)
+        if persona.get("avg_price") and persona.get("min_price") and persona.get("max_price"):
+            price_diff = abs(p["price"] - persona["avg_price"])
+            price_range = persona["max_price"] - persona["min_price"]
+            if price_range > 0:
+                price_score = 1 - (price_diff / price_range)
+                rule_score += 0.3 * max(0, price_score)
         
         # Hybrid score: 60% vector + 40% rules
         if "score" in p:  # Has vector similarity
@@ -299,7 +314,7 @@ async def get_recommendations(
             reasons.append(f"Matches your interest in {p['master_category']}")
         if color_match:
             reasons.append(f"Matches your preference for {product_color} items")
-        if persona["min_price"] <= p["price"] <= persona["max_price"]:
+        if persona.get("min_price") and persona.get("max_price") and persona["min_price"] <= p["price"] <= persona["max_price"]:
             reasons.append(f"Within your typical price range (${persona['min_price']:.0f}-${persona['max_price']:.0f})")
         if "score" in p and p["score"] > 0.8:
             reasons.append("Similar to items you've liked before")
@@ -313,7 +328,11 @@ async def get_recommendations(
     filtered_products.sort(key=lambda x: x.similarity_score or 0, reverse=True)
     products = filtered_products[:limit]
     
-    logger.info(f"Returning {len(products)} personalized recommendations (avg score: {np.mean([p.similarity_score for p in products]):.2f})")
+    if len(products) > 0:
+        avg_score = np.mean([p.similarity_score for p in products])
+        logger.info(f"Returning {len(products)} personalized recommendations (avg score: {avg_score:.2f})")
+    else:
+        logger.warning(f"Returning 0 recommendations for user {user_id}")
 
     return SearchResponse(
         products=products,
