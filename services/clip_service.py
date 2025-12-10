@@ -52,8 +52,8 @@ class CLIPService:
 
             logger.info(f"Calling CLIP endpoint for text embedding: '{text[:100]}...'")
 
-            # Call Model Serving endpoint
-            timeout = aiohttp.ClientTimeout(total=30)
+            # Call Model Serving endpoint (longer timeout for cold starts)
+            timeout = aiohttp.ClientTimeout(total=120)  # 2 minutes for cold starts
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     self.endpoint_url,
@@ -100,8 +100,8 @@ class CLIPService:
 
             logger.info(f"Calling CLIP endpoint for image embedding (size: {len(image_bytes)} bytes)")
 
-            # Call Model Serving endpoint
-            timeout = aiohttp.ClientTimeout(total=30)
+            # Call Model Serving endpoint (longer timeout for cold starts)
+            timeout = aiohttp.ClientTimeout(total=120)  # 2 minutes for cold starts
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     self.endpoint_url,

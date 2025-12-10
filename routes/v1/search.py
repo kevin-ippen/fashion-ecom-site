@@ -179,21 +179,23 @@ async def get_recommendations(
             logger.info(f"✅ Found user embedding: shape={user_embedding.shape}")
 
             # Build flexible filters based on parameters
+            # Databricks Vector Search filter syntax:
+            # - For IN: just pass list directly {"field": ["val1", "val2"]}
+            # - For comparisons: use nested dict {"field": {"$gte": 10, "$lte": 100}}
             filters = {}
 
             if restrict_category and persona.get("preferred_categories"):
-                filters["master_category IN"] = persona["preferred_categories"]
+                filters["master_category"] = persona["preferred_categories"]
                 logger.info(f"Restricting to categories: {persona['preferred_categories']}")
 
             if restrict_price:
                 min_price = persona["p25_price"] * 0.8
                 max_price = persona["p75_price"] * 1.2
-                filters["price >="] = min_price
-                filters["price <="] = max_price
+                filters["price"] = {"$gte": min_price, "$lte": max_price}
                 logger.info(f"Restricting to price range: ${min_price:.0f}-${max_price:.0f}")
 
             if restrict_color and persona.get("color_prefs"):
-                filters["base_color IN"] = persona["color_prefs"]
+                filters["base_color"] = persona["color_prefs"]
                 logger.info(f"Restricting to colors: {persona['color_prefs']}")
 
             # Search hybrid index with flexible filters
