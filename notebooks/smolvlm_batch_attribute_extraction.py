@@ -78,17 +78,28 @@ OUTPUT_TABLE = f"{CATALOG}.{SCHEMA}.product_extracted_attributes"
 MODEL_NAME = "HuggingFaceTB/SmolVLM-Instruct"  # SmolVLM-2.2B
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Batch processing configuration
-SAMPLE_SIZE = 100  # Start with 100 products for testing
-BATCH_SIZE = 8  # Process 8 images at a time on GPU
-NUM_PARTITIONS = 4  # Spark parallelism
+# Cluster configuration
+# Standard_NC4as_T4_v3: 2-8 workers, each with T4 GPU (16GB), 28GB RAM, 4 cores
+MIN_WORKERS = 2
+MAX_WORKERS = 8
+NUM_PARTITIONS = 16  # 2x max workers for optimal load balancing
+
+# Processing configuration
+SAMPLE_SIZE = 100  # Start with 100 products for testing (set to None for full 44K catalog)
+BATCH_SIZE = 8  # Images per batch (not currently used, but available for optimization)
 
 print(f"✅ Configuration loaded")
 print(f"   Products Table: {PRODUCTS_TABLE}")
 print(f"   Output Table: {OUTPUT_TABLE}")
 print(f"   Model: {MODEL_NAME}")
 print(f"   Device: {DEVICE}")
+print(f"   Cluster: {MIN_WORKERS}-{MAX_WORKERS} workers with T4 GPUs (Standard_NC4as_T4_v3)")
+print(f"   Partitions: {NUM_PARTITIONS} (for optimal parallelism)")
 print(f"   Sample Size: {SAMPLE_SIZE} (set to None for full catalog)")
+print(f"\n   💡 Estimated throughput:")
+print(f"      - With {MIN_WORKERS} workers: ~{20 * MIN_WORKERS} products/minute")
+print(f"      - With {MAX_WORKERS} workers: ~{20 * MAX_WORKERS} products/minute")
+print(f"      - Full catalog (44K): ~4.6 hours @ {MAX_WORKERS} workers")
 
 # COMMAND ----------
 
@@ -141,125 +152,53 @@ class PromptTemplates:
     @staticmethod
     def material_pattern() -> str:
         """Prompt for material and pattern extraction"""
-        return """Analyze this fashion product image carefully.
+        return """Look at this product image and identify the material and pattern.
 
-Identify:
-1. PRIMARY MATERIAL - What is the main material? Choose EXACTLY ONE:
-   - leather (shiny textured animal hide)
-   - denim (blue woven cotton fabric)
-   - knit fabric (stretchy soft like t-shirt or sweater)
-   - woven fabric (structured like dress shirt)
-   - synthetic (shiny athletic or performance fabric)
-   - metal (jewelry, watches, buckles)
-   - canvas (thick woven fabric)
-   - unknown (cannot determine)
+For material, choose from: leather, denim, knit fabric, woven fabric, synthetic, metal, canvas, unknown
+For pattern, choose from: solid color, striped, floral print, geometric, polka dots, checkered, abstract print, no clear pattern
+For confidence, choose from: high, medium, low
 
-2. PATTERN - What pattern is visible? Choose EXACTLY ONE:
-   - solid color (no pattern visible)
-   - striped (lines or stripes)
-   - floral print (flowers or botanical)
-   - geometric (shapes or geometric patterns)
-   - polka dots (dots or circles)
-   - checkered (grid or plaid pattern)
-   - abstract print (unclear or artistic pattern)
-   - no clear pattern
+Example for a leather jacket:
+{"material": "leather", "pattern": "solid color", "confidence": "high"}
 
-3. CONFIDENCE - How confident are you in these assessments?
-   - high (very certain)
-   - medium (somewhat certain)
-   - low (not very certain)
+Example for a striped cotton shirt:
+{"material": "woven fabric", "pattern": "striped", "confidence": "high"}
 
-Respond ONLY with valid JSON in this exact format:
-{
-  "material": "one of the material options",
-  "pattern": "one of the pattern options",
-  "confidence": "high, medium, or low"
-}"""
+Now analyze this image and respond with JSON:"""
 
     @staticmethod
     def style_formality() -> str:
         """Prompt for style and formality extraction"""
-        return """Analyze this fashion product image carefully.
+        return """Look at this product and describe its style.
 
-Identify:
-1. FORMALITY LEVEL - How formal is this item? Choose EXACTLY ONE:
-   - formal (suits, gowns, tuxedos, very dressy)
-   - business casual (office appropriate but not a full suit)
-   - casual (everyday wear like t-shirts, jeans, casual dresses)
-   - athletic (sportswear, activewear, gym clothes)
+Formality: formal, business casual, casual, or athletic
+Style keywords: Pick 1-3 from: athletic, sporty, vintage, retro, modern, contemporary, minimalist, simple, bohemian, hippie, streetwear, urban, professional, corporate, elegant, sophisticated
+Details: List only what you see from: has pockets, has buttons, has zipper, has hood, has logo, has drawstrings, has belt, has collar
 
-2. STYLE KEYWORDS - What style best describes it? Choose UP TO 3 from this list ONLY:
-   - athletic
-   - sporty
-   - vintage
-   - retro
-   - modern
-   - contemporary
-   - minimalist
-   - simple
-   - bohemian
-   - hippie
-   - streetwear
-   - urban
-   - professional
-   - corporate
-   - elegant
-   - sophisticated
+Example for a hoodie:
+{"formality": "casual", "style_keywords": ["streetwear", "urban"], "details": ["has hood", "has pockets", "has drawstrings"]}
 
-3. VISIBLE DETAILS - What details can you see? List any that apply from this list ONLY:
-   - has pockets
-   - has buttons
-   - has zipper
-   - has hood
-   - has logo
-   - has drawstrings
-   - has belt
-   - has collar
-   - none visible
+Example for a business shirt:
+{"formality": "business casual", "style_keywords": ["professional", "simple"], "details": ["has collar", "has buttons"]}
 
-Respond ONLY with valid JSON in this exact format:
-{
-  "formality": "one of the formality options",
-  "style_keywords": ["keyword1", "keyword2"],
-  "details": ["detail1", "detail2"]
-}"""
+Now analyze this image and respond with JSON:"""
 
     @staticmethod
     def garment_details() -> str:
         """Prompt for garment-specific details (only for apparel)"""
-        return """Analyze this clothing item image carefully.
+        return """Look at this clothing item and identify its features.
 
-Identify:
-1. COLLAR/NECKLINE - What type of collar or neckline? Choose EXACTLY ONE:
-   - crew neck (round close to neck)
-   - v-neck (V-shaped neckline)
-   - collar (dress shirt style collar)
-   - hooded (has a hood)
-   - turtleneck (high collar covering neck)
-   - scoop neck (low round neckline)
-   - no collar (no distinct collar visible)
-   - not applicable (not a top garment)
+Collar: crew neck, v-neck, collar, hooded, turtleneck, scoop neck, no collar, or not applicable
+Sleeves: short sleeve, long sleeve, sleeveless, three-quarter sleeve, or not applicable
+Fit: fitted, regular, loose, oversized, or cannot determine
 
-2. SLEEVE LENGTH - What is the sleeve length? Choose EXACTLY ONE:
-   - short sleeve
-   - long sleeve
-   - sleeveless (no sleeves)
-   - three-quarter sleeve
-   - not applicable (not a garment with sleeves)
+Example for a t-shirt:
+{"collar": "crew neck", "sleeves": "short sleeve", "fit": "regular"}
 
-3. FIT - How does it fit? Choose EXACTLY ONE:
-   - fitted (tight, form-fitting, shows body shape)
-   - regular (standard fit, not tight or loose)
-   - loose (relaxed, comfortable fit)
-   - oversized (intentionally very large)
-   - cannot determine (flat lay or unclear)
+Example for a dress:
+{"collar": "scoop neck", "sleeves": "sleeveless", "fit": "fitted"}
 
-Respond ONLY with valid JSON in this exact format:
-{
-  "collar": "one of the collar options",
-  "sleeves": "one of the sleeve options",
-  "fit": "one of the fit options"
-}"""
+Now analyze this image and respond with JSON:"""
 
 prompts = PromptTemplates()
 print("✅ Prompt templates defined")
@@ -321,13 +260,27 @@ def query_smolvlm(image: Image.Image, prompt: str, config: SmolVLMConfig) -> Dic
 
         response_text = generated_texts[0]
 
-        # Extract JSON from response (SmolVLM may include extra text)
-        # Find JSON block between { and }
+        # Extract JSON from response - handle nested braces properly
         start_idx = response_text.find('{')
-        end_idx = response_text.rfind('}')
-
-        if start_idx == -1 or end_idx == -1:
+        
+        if start_idx == -1:
             return {"error": "No JSON found in response", "raw_response": response_text}
+
+        # Count braces to find the matching closing brace
+        brace_count = 0
+        end_idx = -1
+        
+        for i in range(start_idx, len(response_text)):
+            if response_text[i] == '{':
+                brace_count += 1
+            elif response_text[i] == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    end_idx = i
+                    break
+        
+        if end_idx == -1:
+            return {"error": "No matching closing brace found", "raw_response": response_text}
 
         json_text = response_text[start_idx:end_idx+1]
 
@@ -336,7 +289,7 @@ def query_smolvlm(image: Image.Image, prompt: str, config: SmolVLMConfig) -> Dic
         return result
 
     except json.JSONDecodeError as e:
-        return {"error": f"JSON parse error: {str(e)}", "raw_response": response_text}
+        return {"error": f"JSON parse error: {str(e)}", "raw_response": response_text, "extracted_json": json_text}
     except Exception as e:
         return {"error": f"Inference error: {str(e)}"}
 
@@ -411,7 +364,7 @@ def extract_attributes(image: Image.Image, article_type: str, config: SmolVLMCon
         # Not apparel, set N/A
         results["collar"] = "not applicable"
         results["sleeves"] = "not applicable"
-        results["fit"] = "not applicable"
+        results["fit"] = "cannot determine"
 
     return results
 
@@ -491,48 +444,218 @@ print("✅ Spark UDF schema defined")
 # COMMAND ----------
 
 # DBTITLE 1,Create Pandas UDF for Batch Processing
-from pyspark.sql.functions import pandas_udf
-
-@pandas_udf(attributes_schema)
-def extract_attributes_udf(image_paths: pd.Series, article_types: pd.Series) -> pd.DataFrame:
+def process_batch(iterator):
     """
-    Pandas UDF for batch attribute extraction
-
-    Processes images in batches using SmolVLM
+    Process batches of products using mapInPandas
+    
+    All inference logic is self-contained to avoid serializing driver objects
     """
-    results = []
-
-    for image_path, article_type in zip(image_paths, article_types):
+    # Import libraries in worker context
+    import torch
+    from transformers import AutoProcessor, AutoModelForVision2Seq
+    from PIL import Image
+    import logging
+    import json
+    from dataclasses import dataclass
+    
+    # Get MODEL_NAME from global scope (string is small)
+    model_name = "HuggingFaceTB/SmolVLM-Instruct"
+    
+    # Load model on worker
+    logger = logging.getLogger(__name__)
+    logger.info("Loading SmolVLM model on worker...")
+    
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    torch_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+    
+    processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
+    model = AutoModelForVision2Seq.from_pretrained(
+        model_name,
+        torch_dtype=torch_dtype,
+        device_map="auto",
+        trust_remote_code=True
+    )
+    
+    @dataclass
+    class WorkerConfig:
+        model_name: str
+        device: str
+        torch_dtype: torch.dtype
+        max_new_tokens: int = 200
+        temperature: float = 0.1
+        do_sample: bool = False
+    
+    worker_config = WorkerConfig(
+        model_name=model_name,
+        device=device,
+        torch_dtype=torch_dtype
+    )
+    logger.info(f"Model loaded on {device}")
+    
+    # Define prompts inside worker
+    def material_pattern_prompt():
+        return """Look at this product image and identify the material and pattern.\n\nFor material, choose from: leather, denim, knit fabric, woven fabric, synthetic, metal, canvas, unknown\nFor pattern, choose from: solid color, striped, floral print, geometric, polka dots, checkered, abstract print, no clear pattern\nFor confidence, choose from: high, medium, low\n\nExample for a leather jacket:\n{\"material\": \"leather\", \"pattern\": \"solid color\", \"confidence\": \"high\"}\n\nExample for a striped cotton shirt:\n{\"material\": \"woven fabric\", \"pattern\": \"striped\", \"confidence\": \"high\"}\n\nNow analyze this image and respond with JSON:"""
+    
+    def style_formality_prompt():
+        return """Look at this product and describe its style.\n\nFormality: formal, business casual, casual, or athletic\nStyle keywords: Pick 1-3 from: athletic, sporty, vintage, retro, modern, contemporary, minimalist, simple, bohemian, hippie, streetwear, urban, professional, corporate, elegant, sophisticated\nDetails: List only what you see from: has pockets, has buttons, has zipper, has hood, has logo, has drawstrings, has belt, has collar\n\nExample for a hoodie:\n{\"formality\": \"casual\", \"style_keywords\": [\"streetwear\", \"urban\"], \"details\": [\"has hood\", \"has pockets\", \"has drawstrings\"]}\n\nExample for a business shirt:\n{\"formality\": \"business casual\", \"style_keywords\": [\"professional\", \"simple\"], \"details\": [\"has collar\", \"has buttons\"]}\n\nNow analyze this image and respond with JSON:"""
+    
+    def garment_details_prompt():
+        return """Look at this clothing item and identify its features.\n\nCollar: crew neck, v-neck, collar, hooded, turtleneck, scoop neck, no collar, or not applicable\nSleeves: short sleeve, long sleeve, sleeveless, three-quarter sleeve, or not applicable\nFit: fitted, regular, loose, oversized, or cannot determine\n\nExample for a t-shirt:\n{\"collar\": \"crew neck\", \"sleeves\": \"short sleeve\", \"fit\": \"regular\"}\n\nExample for a dress:\n{\"collar\": \"scoop neck\", \"sleeves\": \"sleeveless\", \"fit\": \"fitted\"}\n\nNow analyze this image and respond with JSON:"""
+    
+    # Define query function inside worker
+    def query_smolvlm(image, prompt):
         try:
-            # Load image
-            with open(image_path, 'rb') as f:
-                image = Image.open(f).convert('RGB')
-
-            # Extract attributes
-            attrs = extract_attributes(image, article_type, config)
-
-            results.append(attrs)
-
+            messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": prompt}]}]
+            prompt_text = processor.apply_chat_template(messages, add_generation_prompt=True)
+            inputs = processor(text=prompt_text, images=[image], return_tensors="pt").to(worker_config.device)
+            
+            with torch.no_grad():
+                generated_ids = model.generate(**inputs, max_new_tokens=worker_config.max_new_tokens, temperature=worker_config.temperature, do_sample=worker_config.do_sample)
+            
+            generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+            response_text = generated_texts[0]
+            
+            start_idx = response_text.find('{')
+            if start_idx == -1:
+                return {"error": "No JSON found in response"}
+            
+            brace_count = 0
+            end_idx = -1
+            for i in range(start_idx, len(response_text)):
+                if response_text[i] == '{':
+                    brace_count += 1
+                elif response_text[i] == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_idx = i
+                        break
+            
+            if end_idx == -1:
+                return {"error": "No matching closing brace found"}
+            
+            json_text = response_text[start_idx:end_idx+1]
+            result = json.loads(json_text)
+            return result
         except Exception as e:
-            # Return error result
-            logger.error(f"Error processing {image_path}: {e}")
-            results.append({
-                "material": "unknown",
-                "pattern": "no clear pattern",
-                "confidence_material": "low",
-                "formality": "casual",
-                "style_keywords": [],
-                "visual_details": [],
-                "collar": "not applicable",
-                "sleeves": "not applicable",
-                "fit": "cannot determine",
-                "extraction_success": False,
-                "extraction_errors": [str(e)]
-            })
+            return {"error": f"Inference error: {str(e)}"}
+    
+    # Define extract function inside worker
+    def extract_attributes(image, article_type):
+        results = {"extraction_success": True, "extraction_errors": []}
+        
+        material_result = query_smolvlm(image, material_pattern_prompt())
+        if "error" in material_result:
+            results["extraction_success"] = False
+            results["extraction_errors"].append(f"Material: {material_result['error']}")
+            results["material"] = "unknown"
+            results["pattern"] = "no clear pattern"
+            results["confidence_material"] = "low"
+        else:
+            results["material"] = material_result.get("material", "unknown")
+            results["pattern"] = material_result.get("pattern", "no clear pattern")
+            results["confidence_material"] = material_result.get("confidence", "low")
+        
+        style_result = query_smolvlm(image, style_formality_prompt())
+        if "error" in style_result:
+            results["extraction_success"] = False
+            results["extraction_errors"].append(f"Style: {style_result['error']}")
+            results["formality"] = "casual"
+            results["style_keywords"] = []
+            results["visual_details"] = []
+        else:
+            results["formality"] = style_result.get("formality", "casual")
+            results["style_keywords"] = style_result.get("style_keywords", [])
+            results["visual_details"] = style_result.get("details", [])
+        
+        apparel_types = ["Topwear", "Bottomwear", "Dress", "Innerwear", "Loungewear"]
+        if any(apparel in article_type for apparel in apparel_types):
+            garment_result = query_smolvlm(image, garment_details_prompt())
+            if "error" in garment_result:
+                results["extraction_errors"].append(f"Garment: {garment_result['error']}")
+                results["collar"] = "not applicable"
+                results["sleeves"] = "not applicable"
+                results["fit"] = "cannot determine"
+            else:
+                results["collar"] = garment_result.get("collar", "not applicable")
+                results["sleeves"] = garment_result.get("sleeves", "not applicable")
+                results["fit"] = garment_result.get("fit", "cannot determine")
+        else:
+            results["collar"] = "not applicable"
+            results["sleeves"] = "not applicable"
+            results["fit"] = "cannot determine"
+        
+        return results
+    
+    # Process batches
+    for batch_df in iterator:
+        results = []
+        
+        for idx, row in batch_df.iterrows():
+            try:
+                with open(row['image_path'], 'rb') as f:
+                    image = Image.open(f).convert('RGB')
+                
+                attrs = extract_attributes(image, row['article_type'])
+                
+                result = {
+                    'product_id': row['product_id'],
+                    'product_display_name': row['product_display_name'],
+                    'master_category': row['master_category'],
+                    'sub_category': row['sub_category'],
+                    'article_type': row['article_type'],
+                    'base_color': row['base_color'],
+                    'price': row['price'],
+                    'gender': row['gender'],
+                    'season': row['season'],
+                    'usage': row['usage'],
+                    'year': row['year'],
+                    'image_path': row['image_path'],
+                    'material': attrs['material'],
+                    'pattern': attrs['pattern'],
+                    'confidence_material': attrs['confidence_material'],
+                    'formality': attrs['formality'],
+                    'style_keywords': attrs['style_keywords'],
+                    'visual_details': attrs['visual_details'],
+                    'collar_type': attrs['collar'],
+                    'sleeve_length': attrs['sleeves'],
+                    'fit_type': attrs['fit'],
+                    'extraction_success': attrs['extraction_success'],
+                    'extraction_errors': attrs['extraction_errors']
+                }
+                results.append(result)
+                
+            except Exception as e:
+                logger.error(f"Error processing {row['image_path']}: {e}")
+                result = {
+                    'product_id': row['product_id'],
+                    'product_display_name': row['product_display_name'],
+                    'master_category': row['master_category'],
+                    'sub_category': row['sub_category'],
+                    'article_type': row['article_type'],
+                    'base_color': row['base_color'],
+                    'price': row['price'],
+                    'gender': row['gender'],
+                    'season': row['season'],
+                    'usage': row['usage'],
+                    'year': row['year'],
+                    'image_path': row['image_path'],
+                    'material': 'unknown',
+                    'pattern': 'no clear pattern',
+                    'confidence_material': 'low',
+                    'formality': 'casual',
+                    'style_keywords': [],
+                    'visual_details': [],
+                    'collar_type': 'not applicable',
+                    'sleeve_length': 'not applicable',
+                    'fit_type': 'cannot determine',
+                    'extraction_success': False,
+                    'extraction_errors': [str(e)]
+                }
+                results.append(result)
+        
+        yield pd.DataFrame(results)
 
-    return pd.DataFrame(results)
-
-print("✅ Pandas UDF created")
+print("✅ Batch processing function created")
 
 # COMMAND ----------
 
@@ -579,38 +702,50 @@ print(f"✅ Repartitioned to {NUM_PARTITIONS} partitions")
 
 # DBTITLE 1,Extract Attributes
 print("🔄 Starting attribute extraction...")
-print(f"   This will take approximately {product_count * 3 / 60:.1f} minutes")
-print(f"   (3 prompts per image, ~20 images/minute)")
+print(f"   Cluster: {MIN_WORKERS}-{MAX_WORKERS} workers with T4 GPUs")
+print(f"   Strategy: Each worker loads model once per partition, then processes all images")
+print(f"   Estimated time: {product_count * 3 / 60 / MAX_WORKERS:.1f}-{product_count * 3 / 60 / MIN_WORKERS:.1f} minutes")
+print(f"   (3 prompts per image, ~20 images/minute per worker)")
 
 start_time = time.time()
 
-# Apply UDF to extract attributes
-products_with_attrs = products_df.withColumn(
-    "extracted_attrs",
-    extract_attributes_udf(
-        F.col("image_path"),
-        F.col("article_type")
-    )
-)
+# Optimize partitioning for dynamic worker scaling (2-8 workers)
+products_df_optimized = products_df.repartition(NUM_PARTITIONS)
+print(f"   Repartitioned to {NUM_PARTITIONS} partitions for optimal parallelism")
 
-# Expand struct into columns
-products_with_attrs = products_with_attrs.select(
-    "*",
-    F.col("extracted_attrs.material").alias("material"),
-    F.col("extracted_attrs.pattern").alias("pattern"),
-    F.col("extracted_attrs.confidence_material").alias("confidence_material"),
-    F.col("extracted_attrs.formality").alias("formality"),
-    F.col("extracted_attrs.style_keywords").alias("style_keywords"),
-    F.col("extracted_attrs.visual_details").alias("visual_details"),
-    F.col("extracted_attrs.collar").alias("collar_type"),
-    F.col("extracted_attrs.sleeves").alias("sleeve_length"),
-    F.col("extracted_attrs.fit").alias("fit_type"),
-    F.col("extracted_attrs.extraction_success").alias("extraction_success"),
-    F.col("extracted_attrs.extraction_errors").alias("extraction_errors")
-).drop("extracted_attrs")
+# Define output schema for mapInPandas
+output_schema = StructType([
+    StructField("product_id", IntegerType(), True),
+    StructField("product_display_name", StringType(), True),
+    StructField("master_category", StringType(), True),
+    StructField("sub_category", StringType(), True),
+    StructField("article_type", StringType(), True),
+    StructField("base_color", StringType(), True),
+    StructField("price", DoubleType(), True),
+    StructField("gender", StringType(), True),
+    StructField("season", StringType(), True),
+    StructField("usage", StringType(), True),
+    StructField("year", IntegerType(), True),
+    StructField("image_path", StringType(), True),
+    StructField("material", StringType(), True),
+    StructField("pattern", StringType(), True),
+    StructField("confidence_material", StringType(), True),
+    StructField("formality", StringType(), True),
+    StructField("style_keywords", ArrayType(StringType()), True),
+    StructField("visual_details", ArrayType(StringType()), True),
+    StructField("collar_type", StringType(), True),
+    StructField("sleeve_length", StringType(), True),
+    StructField("fit_type", StringType(), True),
+    StructField("extraction_success", BooleanType(), True),
+    StructField("extraction_errors", ArrayType(StringType()), True),
+])
 
-# Cache result
-products_with_attrs.cache()
+# Use mapInPandas for distributed GPU processing
+# Each worker loads the model once per partition, then processes all images in that partition
+print("\n🚀 Starting distributed processing across GPU workers...")
+products_with_attrs = products_df_optimized.mapInPandas(process_batch, schema=output_schema)
+
+# Trigger execution and count results
 count = products_with_attrs.count()
 
 elapsed = time.time() - start_time
@@ -618,6 +753,7 @@ print(f"\n✅ Extraction complete!")
 print(f"   Processed: {count:,} products")
 print(f"   Time: {elapsed/60:.1f} minutes")
 print(f"   Speed: {count/(elapsed/60):.1f} products/minute")
+print(f"   Effective parallelism: {(count/(elapsed/60))/20:.1f}x (vs single GPU @ 20 products/min)")
 
 # COMMAND ----------
 
@@ -881,5 +1017,3 @@ spark.sql(f"""
     ORDER BY description_length DESC
     LIMIT 10
 """).show(truncate=False)
-
-# COMMAND ----------
