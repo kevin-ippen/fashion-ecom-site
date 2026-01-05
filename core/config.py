@@ -35,15 +35,18 @@ class Settings(BaseSettings):
     CATALOG: str = "main"
     SCHEMA: str = "fashion_sota"  # Changed from fashion_demo
 
-    # Lakebase synced tables (Postgres side) - UPDATED FOR FASHION_SOTA
-    LAKEBASE_SCHEMA: str = "fashion_sota"  # Changed from fashion_demo
-    LAKEBASE_PRODUCTS_TABLE: str = "products"  # Changed from productsdb
-    LAKEBASE_USERS_TABLE: str = "users"  # Changed from usersdb
-    LAKEBASE_USER_FEATURES_TABLE: str = "user_preferences"  # Changed from user_style_featuresdb
+    # Unity Catalog Tables - Using Lakebase-synced tables in UC
+    # These are foreign tables in UC that sync from Lakebase PostgreSQL
+    UC_PRODUCTS_TABLE: str = "main.fashion_sota.products_lakebase"  # Lakebase-synced products
+    UC_PRODUCT_EMBEDDINGS_TABLE: str = "main.fashion_sota.product_embeddings"  # For vector search
+    UC_USERS_TABLE: str = "main.fashion_sota.users"  # User accounts
+    UC_USER_PREFERENCES_TABLE: str = "main.fashion_sota.user_preferences"  # User preferences
 
-    # Unity Catalog - Source Tables (for embeddings) - UPDATED
-    # Note: product_embeddings has ALL metadata denormalized (no separate products table needed)
-    UC_PRODUCT_EMBEDDINGS_TABLE: str = "main.fashion_sota.product_embeddings"
+    # Legacy Lakebase config (for backward compatibility)
+    LAKEBASE_SCHEMA: str = "fashion_sota"
+    LAKEBASE_PRODUCTS_TABLE: str = "products_lakebase"
+    LAKEBASE_USERS_TABLE: str = "users"
+    LAKEBASE_USER_FEATURES_TABLE: str = "user_preferences"
 
     # Databricks Workspace
     @property
@@ -87,26 +90,26 @@ class Settings(BaseSettings):
         """Full URL to CLIP model serving endpoint"""
         return f"{self.DATABRICKS_WORKSPACE_URL}/serving-endpoints/{self.CLIP_ENDPOINT_NAME}/invocations"
 
-    # Aliases for backward compatibility
+    # Aliases for backward compatibility - Point to fully qualified UC tables
     @property
     def PRODUCTS_TABLE(self) -> str:
-        return self.LAKEBASE_PRODUCTS_TABLE
+        """Fully qualified Unity Catalog table name for products"""
+        return self.UC_PRODUCTS_TABLE
 
     @property
     def USERS_TABLE(self) -> str:
-        return self.LAKEBASE_USERS_TABLE
+        """Fully qualified Unity Catalog table name for users"""
+        return self.UC_USERS_TABLE
 
     @property
     def EMBEDDINGS_TABLE(self) -> str:
-        """
-        Note: In fashion_sota, embeddings and products are in the SAME table
-        This returns the Unity Catalog table name
-        """
+        """Fully qualified Unity Catalog table name for embeddings"""
         return self.UC_PRODUCT_EMBEDDINGS_TABLE
 
     @property
     def USER_FEATURES_TABLE(self) -> str:
-        return self.LAKEBASE_USER_FEATURES_TABLE
+        """Fully qualified Unity Catalog table name for user preferences"""
+        return self.UC_USER_PREFERENCES_TABLE
 
     # API
     API_PREFIX: str = "/api"

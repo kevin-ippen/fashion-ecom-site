@@ -11,11 +11,18 @@ logger = logging.getLogger(__name__)
 
 
 class LakebaseRepository:
-    """Repository for accessing Unity Catalog tables via Lakebase PostgreSQL"""
+    """
+    Repository for accessing Unity Catalog tables
+    Note: Tables are now fully qualified UC table names (e.g. main.fashion_sota.products_lakebase)
+    """
 
     def __init__(self, session: AsyncSession):
         self.session = session
-        self.schema = settings.LAKEBASE_SCHEMA
+        # Use fully qualified UC table names
+        self.products_table = settings.PRODUCTS_TABLE  # main.fashion_sota.products_lakebase
+        self.embeddings_table = settings.EMBEDDINGS_TABLE  # main.fashion_sota.product_embeddings
+        self.users_table = settings.USERS_TABLE  # main.fashion_sota.users
+        self.user_features_table = settings.USER_FEATURES_TABLE  # main.fashion_sota.user_preferences
 
     async def _execute_query(self, query: str, params: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """Execute a SQL query and return results as list of dicts"""
@@ -79,7 +86,7 @@ class LakebaseRepository:
 
         query = f"""
             SELECT *
-            FROM {self.schema}.{settings.PRODUCTS_TABLE}
+            FROM {self.products_table}
             {where_clause}
             ORDER BY {sort_by} {sort_order}
             LIMIT :limit OFFSET :offset
@@ -121,7 +128,7 @@ class LakebaseRepository:
 
         query = f"""
             SELECT COUNT(*) as count
-            FROM {self.schema}.{settings.PRODUCTS_TABLE}
+            FROM {self.products_table}
             {where_clause}
         """
 
@@ -132,7 +139,7 @@ class LakebaseRepository:
         """Get a single product by ID"""
         query = f"""
             SELECT *
-            FROM {self.schema}.{settings.PRODUCTS_TABLE}
+            FROM {self.products_table}
             WHERE product_id = :product_id
         """
         results = await self._execute_query(query, {"product_id": product_id})
@@ -149,7 +156,7 @@ class LakebaseRepository:
 
         query = f"""
             SELECT *
-            FROM {self.schema}.{settings.EMBEDDINGS_TABLE}
+            FROM {self.embeddings_table}
             {where_clause}
         """
         return await self._execute_query(query)
@@ -158,7 +165,7 @@ class LakebaseRepository:
         """Get all users"""
         query = f"""
             SELECT *
-            FROM {self.schema}.{settings.USERS_TABLE}
+            FROM {self.users_table}
         """
         return await self._execute_query(query)
 
@@ -166,7 +173,7 @@ class LakebaseRepository:
         """Get a single user by ID"""
         query = f"""
             SELECT *
-            FROM {self.schema}.{settings.USERS_TABLE}
+            FROM {self.users_table}
             WHERE user_id = :user_id
         """
         results = await self._execute_query(query, {"user_id": user_id})
@@ -176,7 +183,7 @@ class LakebaseRepository:
         """Get user style features by user ID"""
         query = f"""
             SELECT *
-            FROM {self.schema}.{settings.USER_FEATURES_TABLE}
+            FROM {self.user_features_table}
             WHERE user_id = :user_id
         """
         results = await self._execute_query(query, {"user_id": user_id})
@@ -195,7 +202,7 @@ class LakebaseRepository:
                 array_agg(DISTINCT season) as seasons,
                 MIN(price) as min_price,
                 MAX(price) as max_price
-            FROM {self.schema}.{settings.PRODUCTS_TABLE}
+            FROM {self.products_table}
         """
         results = await self._execute_query(query)
         if results:
@@ -218,11 +225,11 @@ class LakebaseRepository:
         """Search products by text query with NULL handling"""
         
         # Log the search query for debugging
-        logger.info(f"Text search: '{query}' in {self.schema}.{settings.PRODUCTS_TABLE}")
-        
+        logger.info(f"Text search: '{query}' in {self.products_table}")
+
         sql_query = f"""
             SELECT *
-            FROM {self.schema}.{settings.PRODUCTS_TABLE}
+            FROM {self.products_table}
             WHERE
                 (product_display_name IS NOT NULL AND LOWER(product_display_name) ILIKE :query)
                 OR (article_type IS NOT NULL AND LOWER(article_type) ILIKE :query)
