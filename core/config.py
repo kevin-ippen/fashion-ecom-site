@@ -25,10 +25,10 @@ class Settings(BaseSettings):
     DEBUG: bool = bool(os.getenv("DEBUG", "0") == "1")
 
     # Lakebase Postgres (env is injected when the Lakebase resource is attached to the app)
-    LAKEBASE_HOST: str = os.getenv("PGHOST", "")
+    LAKEBASE_HOST: str = os.getenv("PGHOST", "instance-51628d83-d2d1-4cba-af04-af2b5624ddc0.database.azuredatabricks.net")
     LAKEBASE_PORT: int = int(os.getenv("PGPORT", "5432"))
-    LAKEBASE_DATABASE: str = os.getenv("PGDATABASE", "main")
-    LAKEBASE_USER: str = os.getenv("PGUSER", "")  # SP in Apps; user locally
+    LAKEBASE_DATABASE: str = os.getenv("PGDATABASE", "databricks_postgres")  # Changed from "main"
+    LAKEBASE_USER: str = os.getenv("PGUSER", "")  # SP in Apps; kevin.ippen@databricks.com locally
     LAKEBASE_SSL_MODE: str = "require"
 
     # Unity Catalog (source metadata) - UPDATED FOR FASHION_SOTA

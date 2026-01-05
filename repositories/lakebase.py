@@ -18,11 +18,13 @@ class LakebaseRepository:
 
     def __init__(self, session: AsyncSession):
         self.session = session
-        # Use fully qualified UC table names
-        self.products_table = settings.PRODUCTS_TABLE  # main.fashion_sota.products_lakebase
-        self.embeddings_table = settings.EMBEDDINGS_TABLE  # main.fashion_sota.product_embeddings
-        self.users_table = settings.USERS_TABLE  # main.fashion_sota.users
-        self.user_features_table = settings.USER_FEATURES_TABLE  # main.fashion_sota.user_preferences
+        # Use PostgreSQL schema.table format (not UC format)
+        # When querying through Lakebase PostgreSQL, use schema.table, not catalog.schema.table
+        self.schema = settings.LAKEBASE_SCHEMA  # fashion_sota
+        self.products_table = f"{self.schema}.{settings.LAKEBASE_PRODUCTS_TABLE}"  # fashion_sota.products_lakebase
+        self.embeddings_table = f"{self.schema}.product_embeddings"  # fashion_sota.product_embeddings (if synced)
+        self.users_table = f"{self.schema}.{settings.LAKEBASE_USERS_TABLE}"  # fashion_sota.users
+        self.user_features_table = f"{self.schema}.{settings.LAKEBASE_USER_FEATURES_TABLE}"  # fashion_sota.user_preferences
 
     async def _execute_query(self, query: str, params: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """Execute a SQL query and return results as list of dicts"""
