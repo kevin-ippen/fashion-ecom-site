@@ -63,7 +63,7 @@ class Settings(BaseSettings):
         return "https://adb-984752964297111.11.azuredatabricks.net"
 
     # CLIP Multimodal Model Serving
-    CLIP_ENDPOINT_NAME: str = "clip-multimodal-encoder"
+    CLIP_ENDPOINT_NAME: str = "siglip-multimodal-endpoint"
     CLIP_UC_MODEL: str = "main.fashion_demo.clip_multimodal_encoder"
     CLIP_EMBEDDING_DIM: int = 512
 

@@ -2,6 +2,12 @@
 
 A modern ecommerce storefront experience with AI-powered visual search and personalized recommendations, built on Databricks.
 
+## Quick Links
+
+📄 **[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)** - Architecture, current status, and key milestones
+📚 **[LESSONS_LEARNED.md](LESSONS_LEARNED.md)** - Best practices, patterns, and gotchas
+🔧 **[DATABRICKS_CONTEXT.md](DATABRICKS_CONTEXT.md)** - Complete technical reference
+
 ## Architecture
 
 ### Tech Stack
@@ -13,17 +19,17 @@ A modern ecommerce storefront experience with AI-powered visual search and perso
 - React Router (routing)
 - TanStack Query (server state)
 - Zustand (client state)
-- Axios (HTTP client)
 
 **Backend:**
 - FastAPI (Python web framework)
-- Databricks SQL Connector (data access via Lakebase)
-- Databricks Model Serving (CLIP embeddings)
+- Lakebase PostgreSQL (data access)
+- Model Serving (SigLIP embeddings)
 - Pydantic (data validation)
 
-**Data:**
-- Unity Catalog tables (products, users, embeddings, user features)
-- UC Volumes (product images)
+**Data & ML:**
+- Unity Catalog (Delta Lake tables + volumes)
+- Vector Search (similarity search)
+- SigLIP Multimodal (text + image embeddings)
 
 **Deployment:**
 - Databricks Apps
@@ -126,8 +132,8 @@ DATABRICKS_HOST=your-workspace.cloud.databricks.com
 DATABRICKS_TOKEN=dapi...
 DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/your-warehouse-id
 
-# Optional - for CLIP integration
-CLIP_ENDPOINT=https://your-workspace.cloud.databricks.com/serving-endpoints/clip/invocations
+# Optional - for SigLIP integration
+CLIP_ENDPOINT=https://your-workspace.cloud.databricks.com/serving-endpoints/siglip-multimodal-endpoint/invocations
 ```
 
 3. **Run the development server:**
@@ -258,23 +264,24 @@ The recommendation engine considers:
 - Personalization explanations ("Why we picked this")
 
 ### Search Implementation
-- **Text search**: Currently uses SQL LIKE, ready for CLIP text embeddings
-- **Image search**: Ready for CLIP image embeddings with cosine similarity
-- **Hybrid search**: Combines both modalities
+- **Text search**: SigLIP text embeddings + Vector Search
+- **Image search**: SigLIP image embeddings + Vector Search
+- **Hybrid search**: Combined embeddings for best results
+- **Personalized recommendations**: User behavior embeddings
 
 ### Databricks Integration
-- Uses Databricks SQL Connector for efficient queries
-- Direct access to Unity Catalog tables via Lakebase
-- Ready for Model Serving endpoint integration
+- Lakebase PostgreSQL for fast queries
+- Unity Catalog tables via Delta Lake
+- SigLIP Model Serving endpoint
+- Vector Search for similarity
 - Images served from UC Volumes
-- Parameterized queries for security
+- OAuth M2M authentication
 
-## Project Documentation
+## Documentation
 
-- **[SETUP_AND_TESTING.md](SETUP_AND_TESTING.md)** - Detailed setup and testing guide
-- **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Complete feature overview
-- **[RESTRUCTURING_SUMMARY.md](RESTRUCTURING_SUMMARY.md)** - Databricks Apps best practices migration
-- **[FASHION_ECOM-SITE_CONTEXT.md](FASHION_ECOM-SITE_CONTEXT.md)** - Original project context
+- **[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)** - Complete project overview
+- **[LESSONS_LEARNED.md](LESSONS_LEARNED.md)** - Key learnings and best practices
+- **[DATABRICKS_CONTEXT.md](DATABRICKS_CONTEXT.md)** - Full technical reference
 
 ## Testing
 
@@ -349,17 +356,14 @@ curl "http://localhost:8000/api/v1/search/recommendations/user_001?limit=5"
 - Unity Catalog access control
 - Databricks Apps OAuth2 (when deployed)
 
-## Future Enhancements
+## Next Steps
 
-- [ ] Full CLIP integration for semantic search
-- [ ] Real-time similarity scoring visualization
-- [ ] A/B testing different recommendation algorithms
-- [ ] User interaction tracking and analytics
-- [ ] Advanced filtering (multi-select, ranges)
-- [ ] Product comparison feature
-- [ ] Wishlist functionality
-- [ ] Review and rating system (mock)
-- [ ] Mobile app (React Native)
+- 🚧 Visual attribute extraction (SmolVLM) - IN PROGRESS
+- 📊 Search quality improvements (diversity, re-ranking)
+- 🎯 Learning-to-rank from user behavior
+- 🔄 Complete-the-look recommendations
+- 📈 Real-time analytics dashboard
+- 🧪 A/B testing framework
 
 ## Contributing
 

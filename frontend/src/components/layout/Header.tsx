@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ShoppingCart, User, Search } from 'lucide-react';
+import { ShoppingCart, User, Search, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useCartStore } from '@/stores/cartStore';
 import { usePersonaStore } from '@/stores/personaStore';
@@ -13,78 +13,110 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          {/* Logo */}
-          <Link to="/" className="text-2xl font-bold">
-            Fashion<span className="text-blue-600">.</span>
-          </Link>
+      {/* Announcement bar - luxury touch */}
+      <div className="bg-stone-900 text-white">
+        <div className="container mx-auto px-4 py-2">
+          <p className="text-center text-xs font-sans tracking-wider uppercase">
+            Free shipping on orders over $100 • New arrivals weekly
+          </p>
+        </div>
+      </div>
 
-          {/* Navigation */}
-          <nav className="hidden items-center gap-6 md:flex">
-            <Link
-              to="/products"
-              className="text-sm font-medium transition-colors hover:text-primary"
-            >
-              Shop
+      <header className="sticky top-0 z-50 w-full border-b border-stone-200 bg-white/95 backdrop-blur-md">
+        {/* Main navigation */}
+        <div className="container mx-auto px-4">
+          <div className="flex h-20 items-center justify-between">
+            {/* Logo - Refined serif */}
+            <Link to="/" className="flex-shrink-0">
+              <h1 className="font-serif text-3xl font-semibold tracking-tight text-stone-900">
+                FASHION
+              </h1>
             </Link>
-            <Link
-              to="/search"
-              className="text-sm font-medium transition-colors hover:text-primary"
-            >
-              Search
-            </Link>
-          </nav>
 
-          {/* Actions */}
-          <div className="flex items-center gap-4">
-            {/* Search icon (mobile) */}
-            <Link to="/search" className="md:hidden">
+            {/* Center Navigation - Desktop */}
+            <nav className="hidden items-center gap-8 md:flex">
+              <Link
+                to="/products"
+                className="font-sans text-sm font-medium tracking-wide uppercase text-stone-700 transition-colors hover:text-stone-900"
+              >
+                Shop
+              </Link>
+              <Link
+                to="/products?gender=Women"
+                className="font-sans text-sm font-medium tracking-wide uppercase text-stone-700 transition-colors hover:text-stone-900"
+              >
+                Women
+              </Link>
+              <Link
+                to="/products?gender=Men"
+                className="font-sans text-sm font-medium tracking-wide uppercase text-stone-700 transition-colors hover:text-stone-900"
+              >
+                Men
+              </Link>
+              <Link
+                to="/search"
+                className="font-sans text-sm font-medium tracking-wide uppercase text-stone-700 transition-colors hover:text-stone-900"
+              >
+                Search
+              </Link>
+            </nav>
+
+            {/* Actions - Right aligned */}
+            <div className="flex items-center gap-3">
+              {/* Search - Desktop */}
+              <Link to="/search" className="hidden md:block">
+                <Button variant="ghost" size="sm">
+                  <Search className="h-5 w-5" />
+                </Button>
+              </Link>
+
+              {/* Persona selector */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowPersonaSelector(true)}
+                className="gap-2"
+              >
+                <User className="h-5 w-5" />
+                <span className="hidden lg:inline text-xs">
+                  {selectedPersona ? selectedPersona.name : 'Account'}
+                </span>
+              </Button>
+
+              {/* Wishlist placeholder */}
               <Button variant="ghost" size="sm">
-                <Search className="h-5 w-5" />
+                <Heart className="h-5 w-5" />
               </Button>
-            </Link>
 
-            {/* Persona selector */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowPersonaSelector(true)}
-              className="gap-2"
-            >
-              <User className="h-4 w-4" />
-              <span className="hidden sm:inline">
-                {selectedPersona ? selectedPersona.name : 'Select Persona'}
-              </span>
-            </Button>
-
-            {/* Cart */}
-            <Link to="/cart">
-              <Button variant="ghost" size="sm" className="relative">
-                <ShoppingCart className="h-5 w-5" />
-                {itemCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-xs text-white">
-                    {itemCount}
-                  </span>
-                )}
-              </Button>
-            </Link>
+              {/* Cart */}
+              <Link to="/cart">
+                <Button variant="ghost" size="sm" className="relative">
+                  <ShoppingCart className="h-5 w-5" />
+                  {itemCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-[10px] font-medium text-white">
+                      {itemCount}
+                    </span>
+                  )}
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
 
-        {/* Persona info bar */}
+        {/* Personalization info bar - when persona selected */}
         {selectedPersona && (
-          <div className="border-t bg-blue-50 px-4 py-2">
-            <div className="container mx-auto">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-4">
-                  <span className="font-medium text-blue-900">
-                    Shopping as: {selectedPersona.name}
+          <div className="border-t border-stone-200 bg-amber-50/30">
+            <div className="container mx-auto px-4 py-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="font-sans font-medium text-stone-900">
+                    Shopping as {selectedPersona.name}
                   </span>
-                  <span className="text-blue-700">• {selectedPersona.segment}</span>
+                  <span className="text-stone-600">•</span>
+                  <span className="font-sans text-stone-600">{selectedPersona.segment}</span>
                   <Link
                     to={`/profile/${selectedPersona.user_id}`}
-                    className="text-blue-600 hover:underline"
+                    className="font-sans text-xs text-stone-700 underline-offset-2 hover:underline"
                   >
                     View Profile
                   </Link>
@@ -93,15 +125,18 @@ export function Header() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowPersonaSelector(true)}
-                  className="text-blue-600 hover:text-blue-800"
+                  className="text-xs text-stone-600 hover:text-stone-900"
                 >
-                  Change
+                  Change Persona
                 </Button>
               </div>
             </div>
           </div>
         )}
       </header>
+
+      {/* Mobile nav - placeholder for future improvement */}
+      {/* Would add a mobile menu drawer here */}
 
       {/* Persona Selector Modal */}
       {showPersonaSelector && (

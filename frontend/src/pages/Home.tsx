@@ -29,53 +29,69 @@ export function Home() {
   });
 
   return (
-    <div className="min-h-screen">
-      {/* Hero Section */}
-      <section className="bg-gradient-to-br from-blue-50 via-white to-purple-50 py-20">
+    <div className="min-h-screen bg-stone-50">
+      {/* Hero Section - Editorial Style */}
+      <section className="relative bg-stone-100 py-24 md:py-32">
         <div className="container mx-auto px-4">
-          <div className="mx-auto max-w-3xl text-center">
-            <h1 className="text-5xl font-bold tracking-tight text-gray-900 sm:text-6xl">
-              Discover Fashion
-              <br />
-              <span className="text-blue-600">Powered by AI</span>
-            </h1>
-            <p className="mt-6 text-lg leading-8 text-gray-600">
-              Experience personalized shopping with visual search and intelligent recommendations
-              tailored to your style preferences.
+          <div className="mx-auto max-w-4xl">
+            {/* Eyebrow text */}
+            <p className="text-subtle mb-6 text-center text-stone-600">
+              Spring Collection 2025
             </p>
-            <div className="mt-10 flex items-center justify-center gap-4">
+
+            {/* Hero headline - elegant serif */}
+            <h1 className="mb-8 text-center font-serif text-5xl font-semibold leading-tight tracking-tight text-stone-900 md:text-7xl">
+              Timeless Elegance
+              <br />
+              <span className="font-light italic">Redefined</span>
+            </h1>
+
+            {/* Subheadline */}
+            <p className="mx-auto mb-12 max-w-2xl text-center font-sans text-base leading-relaxed text-stone-600 md:text-lg">
+              Experience fashion curated by AI. Discover pieces that match your unique style through
+              visual search and intelligent recommendations.
+            </p>
+
+            {/* CTAs - refined buttons */}
+            <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link to="/products">
-                <Button size="lg">
-                  Shop Now
+                <Button size="lg" className="w-full sm:w-auto">
+                  Explore Collection
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
               <Link to="/search">
-                <Button variant="outline" size="lg">
-                  Try Visual Search
+                <Button variant="outline" size="lg" className="w-full sm:w-auto">
+                  <Sparkles className="mr-2 h-5 w-5" />
+                  Visual Search
                 </Button>
               </Link>
             </div>
           </div>
         </div>
+
+        {/* Decorative element */}
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-stone-300 to-transparent"></div>
       </section>
 
       {/* Personalized Recommendations Section */}
       {selectedPersona && (
-        <section className="border-t bg-gradient-to-r from-blue-50 to-purple-50 py-16">
+        <section className="border-t border-stone-200 bg-white py-20">
           <div className="container mx-auto px-4">
-            <div className="mb-8 flex items-center justify-between">
+            <div className="mb-12 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
               <div>
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-6 w-6 text-blue-600" />
-                  <h2 className="text-3xl font-bold">Recommended for You</h2>
+                <div className="mb-3 flex items-center gap-3">
+                  <Sparkles className="h-6 w-6 text-amber-600" />
+                  <h2 className="font-serif text-3xl font-semibold tracking-tight text-stone-900 md:text-4xl">
+                    Curated for You
+                  </h2>
                 </div>
-                <p className="mt-2 text-gray-600">
-                  Personalized picks based on {selectedPersona.name}'s style preferences
+                <p className="font-sans text-base text-stone-600">
+                  Personalized selections for {selectedPersona.name}
                 </p>
               </div>
               <Link to={`/profile/${selectedPersona.user_id}`}>
-                <Button variant="outline">View Full Profile</Button>
+                <Button variant="outline">View Profile</Button>
               </Link>
             </div>
             <ProductGrid
@@ -88,16 +104,16 @@ export function Home() {
       )}
 
       {/* Featured Products Section */}
-      <section className="py-16">
+      <section className="border-t border-stone-200 bg-stone-50 py-20">
         <div className="container mx-auto px-4">
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold">
-              {selectedPersona ? 'More to Explore' : 'Featured Products'}
+          <div className="mb-12 text-center">
+            <h2 className="font-serif text-3xl font-semibold tracking-tight text-stone-900 md:text-4xl">
+              {selectedPersona ? 'Discover More' : 'New Arrivals'}
             </h2>
-            <p className="mt-2 text-gray-600">
+            <p className="mt-3 font-sans text-base text-stone-600">
               {selectedPersona
-                ? 'Discover more items from our collection'
-                : 'Check out our latest and most popular items'}
+                ? 'Explore our latest collection'
+                : 'Fresh styles added weekly'}
             </p>
           </div>
           <ProductGrid
@@ -105,7 +121,7 @@ export function Home() {
             showPersonalization={false}
             isLoading={featuredLoading}
           />
-          <div className="mt-8 text-center">
+          <div className="mt-12 text-center">
             <Link to="/products">
               <Button variant="outline" size="lg">
                 View All Products
@@ -118,17 +134,23 @@ export function Home() {
 
       {/* Call to action for persona selection */}
       {!selectedPersona && (
-        <section className="border-t bg-gray-50 py-16">
+        <section className="border-t border-stone-200 bg-white py-20">
           <div className="container mx-auto px-4 text-center">
             <div className="mx-auto max-w-2xl">
-              <Sparkles className="mx-auto h-12 w-12 text-blue-600" />
-              <h2 className="mt-4 text-3xl font-bold">Get Personalized Recommendations</h2>
-              <p className="mt-4 text-lg text-gray-600">
-                Select a shopping persona to see products tailored to your style, preferences, and
-                budget.
+              <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
+                <Sparkles className="h-8 w-8 text-amber-600" />
+              </div>
+              <h2 className="font-serif text-3xl font-semibold tracking-tight text-stone-900 md:text-4xl">
+                Personalized Experience
+              </h2>
+              <p className="mt-4 font-sans text-base leading-relaxed text-stone-600 md:text-lg">
+                Choose a style persona to unlock AI-powered recommendations tailored to your
+                preferences, budget, and lifestyle.
               </p>
               <div className="mt-8">
-                <Button size="lg">Choose Your Persona</Button>
+                <Button size="lg" variant="luxury">
+                  Choose Your Persona
+                </Button>
               </div>
             </div>
           </div>

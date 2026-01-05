@@ -4,26 +4,50 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Luxury Neutral Palette - Warm, sophisticated tones */
+    --background: 40 20% 99%;           /* Warm off-white */
+    --foreground: 30 10% 10%;           /* Rich black */
+
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 30 10% 10%;
+
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
+    --popover-foreground: 30 10% 10%;
+
+    /* Primary: Rich Black */
+    --primary: 30 10% 10%;
+    --primary-foreground: 40 20% 99%;
+
+    /* Secondary: Warm Stone */
+    --secondary: 40 15% 96%;
+    --secondary-foreground: 30 10% 10%;
+
+    /* Muted: Soft Stone */
+    --muted: 40 12% 94%;
+    --muted-foreground: 30 8% 40%;
+
+    /* Accent: Subtle Gold */
+    --accent: 38 60% 90%;
+    --accent-foreground: 30 10% 10%;
+
+    /* Luxury Gold for CTAs */
+    --gold: 38 70% 55%;
+    --gold-foreground: 0 0% 100%;
+
+    /* Rose accent for feminine touches */
+    --rose: 350 85% 90%;
+    --rose-foreground: 30 10% 10%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Subtle borders */
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
+    --ring: 30 10% 10%;
+
+    /* Refined radius */
+    --radius: 0.25rem;
   }
 }
 
@@ -31,8 +55,53 @@
   * {
     @apply border-border;
   }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  /* Typography System */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .font-serif {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+
+  .font-sans {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+}
+
+@layer components {
+  /* Premium Button Styles */
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+    @apply transition-all duration-300 ease-out;
+    @apply shadow-sm hover:shadow-md;
+  }
+
+  .btn-gold {
+    @apply bg-gold text-gold-foreground hover:bg-gold/90;
+    @apply transition-all duration-300 ease-out;
+    @apply shadow-sm hover:shadow-md;
+  }
+
+  /* Elegant hover effects */
+  .hover-lift {
+    @apply transition-all duration-300 ease-out;
+    @apply hover:translate-y-[-2px] hover:shadow-lg;
+  }
+
+  /* Premium card style */
+  .card-luxury {
+    @apply bg-white border border-border/50;
+    @apply transition-all duration-300;
+    @apply hover:shadow-xl hover:border-border;
   }
 }
 
@@ -44,5 +113,20 @@
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  /* Text utilities for fashion */
+  .text-luxury {
+    @apply text-primary font-serif tracking-tight;
+  }
+
+  .text-subtle {
+    @apply text-muted-foreground text-sm tracking-wide uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* Aspect ratios for product images */
+  .aspect-product {
+    aspect-ratio: 3 / 4;
   }
 }

@@ -18,8 +18,8 @@ class CLIPService:
 
     def __init__(self):
         # Two separate endpoints for text and image
-        self.text_endpoint_name = "clip-multimodal-encoder"
-        self.image_endpoint_name = "clip-image-encoder"
+        self.text_endpoint_name = "siglip-multimodal-endpoint"
+        self.image_endpoint_name = "siglip-multimodal-endpoint"
         
         # Construct URLs
         base_url = settings.DATABRICKS_WORKSPACE_URL.rstrip('/')

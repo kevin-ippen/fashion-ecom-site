@@ -201,11 +201,11 @@ https://{workspace_url}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data
 
 ## 🤖 Model Serving Endpoints
 
-### 1. CLIP Multimodal Encoder (Primary)
-**Endpoint Name**: `clip-multimodal-encoder`
+### 1. SigLIP Multimodal Encoder (Primary)
+**Endpoint Name**: `siglip-multimodal-endpoint`
 **UC Model**: `main.fashion_demo.clip_multimodal_encoder`
-**Base Model**: `openai/clip-vit-base-patch32`
-**Capability**: Generate embeddings from text OR images
+**Base Model**: SigLIP (improved vision-language model)
+**Capability**: Generate embeddings from text OR images (unified endpoint)
 **Workload Size**: Large (64 concurrent requests)
 **Scale to Zero**: ✅ Enabled
 
@@ -229,14 +229,7 @@ https://{workspace_url}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data
 }
 ```
 
-**URL**: `https://{workspace}/serving-endpoints/clip-multimodal-encoder/invocations`
-
----
-
-### 2. CLIP Image Encoder (Legacy)
-**Endpoint Name**: `clip-image-encoder`
-**Purpose**: Image-only encoding (pre-multimodal)
-**Status**: Active but use `clip-multimodal-encoder` for new work
+**URL**: `https://{workspace}/serving-endpoints/siglip-multimodal-endpoint/invocations`
 
 ---
 
@@ -616,3 +609,157 @@ user_embedding = user["user_embedding"]  # 512-dim array
 
 **Last Updated**: 2025-12-10
 **Version**: 1.0
+
+## 🎨 UX Improvements (Sprint 1 - 2025-12-31)
+
+### Visual Foundation Transformation
+
+The frontend was redesigned from a tech demo aesthetic to a luxury fashion experience:
+
+**Design System**:
+- **Color Palette**: Moved from blue/purple gradients to warm neutral tones
+  - Primary: Rich stone/black (stone-900)
+  - Backgrounds: Warm off-white (stone-50, stone-100)
+  - Accent: Amber gold (amber-600) for luxury CTAs
+  - Borders: Subtle stone-200
+- **Typography**:
+  - Headings: Playfair Display (elegant serif)
+  - Body: Inter (clean sans-serif)
+  - Small caps and tracking for labels
+- **Spacing**: Increased whitespace for breathing room (py-20 vs py-16)
+
+**Component Updates**:
+- **ProductCard**: Minimal style with slide-up actions on hover, removed visual clutter
+- **Button**: New "luxury" variant with gold accent, refined sizing
+- **Header**: Added announcement bar, serif logo, refined navigation
+- **Home**: Editorial-style hero with serif headlines, organized sections
+
+**Files Modified**:
+- `frontend/index.html` - Added Google Fonts (Playfair Display + Inter)
+- `frontend/src/index.css` - Custom CSS variables, typography system, luxury utilities
+- `frontend/tailwind.config.js` - Custom fonts, animations, gold/rose colors
+- `frontend/src/components/product/ProductCard.tsx` - Minimal luxury redesign
+- `frontend/src/components/ui/Button.tsx` - Added luxury variant
+- `frontend/src/components/layout/Header.tsx` - Announcement bar, refined nav
+- `frontend/src/pages/Home.tsx` - Editorial hero, refined sections
+
+**Design Philosophy**:
+- Minimal, not maximal
+- Typography-driven hierarchy
+- Generous whitespace
+- Subtle animations (500ms duration)
+- Fashion-first, not tech-first
+
+**Next Steps (Sprint 2)**:
+- Enhanced filter UI (chips, color swatches, sliders)
+- Quick View modal for products
+- Micro-animations with Framer Motion
+- Skeleton loading states
+- Toast notifications
+
+---
+
+_Updated: 2025-12-31 - Version 1.1_
+
+## 🎨 UX Improvements (Sprint 2 - 2025-12-31)
+
+### Core Interactions & Polish
+
+Added professional interactivity patterns:
+
+**New Components**:
+1. **Toast Notifications** (react-hot-toast)
+   - Success/error feedback for user actions
+   - Custom styling matching luxury palette
+   - "Added to bag" confirmation with product details
+
+2. **Skeleton Loading States**
+   - Professional loading experience
+   - Matches final content layout
+   - ProductCardSkeleton + ProductGridSkeleton
+
+3. **Enhanced Filters**
+   - ColorSwatch: Visual color picker (16 colors mapped)
+   - FilterChips: Toggleable category/option chips
+   - Better than dropdowns for scanning
+
+4. **Quick View Modal** (@headlessui/react)
+   - Preview products without navigation
+   - Side-by-side image + details
+   - Add to bag directly from modal
+   - Luxury e-commerce pattern
+
+**Files Created**:
+- `frontend/src/components/ui/Toaster.tsx`
+- `frontend/src/components/ui/Skeleton.tsx`
+- `frontend/src/components/filters/ColorSwatch.tsx`
+- `frontend/src/components/filters/FilterChips.tsx`
+- `frontend/src/components/product/QuickViewModal.tsx`
+
+**Files Modified**:
+- `frontend/src/App.tsx` - Added Toaster, refined footer
+- `frontend/src/components/product/ProductCard.tsx` - Toast feedback
+- `frontend/src/components/product/ProductGrid.tsx` - Skeleton loading
+
+**Dependencies Added**:
+- `react-hot-toast@^2.4.1` - Toast notifications
+- `@headlessui/react@^1.7.17` - Accessible UI primitives
+- `framer-motion@^10.x` - Ready for future animations
+
+**Impact**: Professional polish, immediate user feedback, luxury UX patterns
+
+---
+
+_Updated: 2025-12-31 - Version 1.2_
+
+## 🎨 UX Improvements (Sprint 3 - 2025-12-31)
+
+### Fashion Features & Premium Polish
+
+Completed the luxury e-commerce experience:
+
+**Major Features Added**:
+1. **Quick View Integration**
+   - Wired up Quick View modal to ProductCard
+   - "Quick View" button on hover overlay
+   - Preview products without navigation
+   - Core luxury e-commerce pattern
+
+2. **Framer Motion Animations**
+   - Stagger animations on ProductGrid
+   - Products cascade in (50ms delay between each)
+   - Smooth fade + slide up effect (400ms)
+   - Professional, intentional feel
+
+3. **Price Range Slider**
+   - Dual-handle visual slider
+   - Live price label updates
+   - Formatted currency display
+   - Better UX than number inputs
+
+4. **Mobile Filter Drawer**
+   - Slide-up drawer pattern (85vh)
+   - Scrollable filter content
+   - Active filter count badge
+   - Clear All + Apply actions
+   - Backdrop blur for focus
+
+**Components Created**:
+- `frontend/src/components/filters/PriceRangeSlider.tsx`
+- `frontend/src/components/filters/FilterDrawer.tsx`
+
+**Components Modified**:
+- `frontend/src/components/product/ProductCard.tsx` - Quick View integration
+- `frontend/src/components/product/ProductGrid.tsx` - Stagger animations
+
+**Impact**: Complete luxury shopping experience with industry-standard features
+
+**All 3 Sprints Complete**:
+- Sprint 1: Visual foundation (colors, typography, layout)
+- Sprint 2: Core interactions (toasts, skeletons, base filters)
+- Sprint 3: Fashion features (Quick View, animations, complete filters)
+
+---
+
+_Updated: 2025-12-31 - Version 1.3_
+_Status: Production-ready luxury e-commerce experience_
