@@ -1,7 +1,3 @@
-"""
-Updated configuration for Fashion SOTA schema migration
-To activate: Copy this file to config.py or merge changes into existing config.py
-"""
 import os
 import logging
 from typing import Optional, List
@@ -21,7 +17,7 @@ class Settings(BaseSettings):
 
     # App
     APP_NAME: str = os.getenv("DATABRICKS_APP_NAME", "Fashion Ecommerce API")
-    APP_VERSION: str = "2.0.0"  # Bumped for fashion_sota migration
+    APP_VERSION: str = "1.0.0"
     DEBUG: bool = bool(os.getenv("DEBUG", "0") == "1")
 
     # Lakebase Postgres (env is injected when the Lakebase resource is attached to the app)
@@ -31,21 +27,21 @@ class Settings(BaseSettings):
     LAKEBASE_USER: str = os.getenv("PGUSER", "")  # SP in Apps; user locally
     LAKEBASE_SSL_MODE: str = "require"
 
-    # Unity Catalog (source metadata) - UPDATED FOR FASHION_SOTA
+    # Unity Catalog (source metadata)
     CATALOG: str = "main"
-    SCHEMA: str = "fashion_sota"  # Changed from fashion_demo
+    SCHEMA: str = "fashion_demo"
 
-    # Lakebase synced tables (Postgres side) - UPDATED FOR FASHION_SOTA
-    LAKEBASE_SCHEMA: str = "fashion_sota"  # Changed from fashion_demo
-    LAKEBASE_PRODUCTS_TABLE: str = "products"  # Changed from productsdb
-    LAKEBASE_USERS_TABLE: str = "users"  # Changed from usersdb
-    LAKEBASE_USER_FEATURES_TABLE: str = "user_preferences"  # Changed from user_style_featuresdb
+    # Lakebase synced tables (Postgres side)
+    LAKEBASE_SCHEMA: str = "fashion_demo"
+    LAKEBASE_PRODUCTS_TABLE: str = "productsdb"
+    LAKEBASE_USERS_TABLE: str = "usersdb"
+    LAKEBASE_USER_FEATURES_TABLE: str = "user_style_featuresdb"
 
-    # Unity Catalog - Source Tables (for embeddings) - UPDATED
-    # Note: product_embeddings has ALL metadata denormalized (no separate products table needed)
-    UC_PRODUCT_EMBEDDINGS_TABLE: str = "main.fashion_sota.product_embeddings"
+    # Unity Catalog - Source Tables (for embeddings)
+    UC_MULTIMODAL_TABLE: str = "main.fashion_demo.product_embeddings_multimodal"
 
     # Databricks Workspace
+    # Construct from DATABRICKS_HOST if DATABRICKS_WORKSPACE_URL not set
     @property
     def DATABRICKS_WORKSPACE_URL(self) -> str:
         """Get workspace URL from env or construct from DATABRICKS_HOST"""
@@ -66,44 +62,37 @@ class Settings(BaseSettings):
         # Final fallback to hardcoded default
         return "https://adb-984752964297111.11.azuredatabricks.net"
 
-    # CLIP Multimodal Model Serving (no change - still works with FashionCLIP 2.0)
+    # CLIP Multimodal Model Serving
     CLIP_ENDPOINT_NAME: str = "siglip-multimodal-endpoint"
-    CLIP_UC_MODEL: str = "main.fashion_demo.clip_multimodal_encoder"  # Still in fashion_demo
+    CLIP_UC_MODEL: str = "main.fashion_demo.clip_multimodal_encoder"
     CLIP_EMBEDDING_DIM: int = 512
 
-    # Vector Search Endpoint - SIMPLIFIED!
-    VS_ENDPOINT_NAME: str = "fashion-vector-search"  # Changed endpoint name (with hyphen)
+    # Vector Search Endpoint
+    VS_ENDPOINT_NAME: str = "fashion_vector_search"
 
-    # Vector Search Index - UNIFIED INDEX (replaces 3 separate indexes)
-    VS_INDEX: str = "main.fashion_sota.product_embeddings_index"
-
-    # Legacy indexes - REMOVED (no longer needed with unified index)
-    # VS_IMAGE_INDEX: str = "main.fashion_demo.vs_image_search"  # DELETED
-    # VS_TEXT_INDEX: str = "main.fashion_demo.vs_text_search"  # DELETED
-    # VS_HYBRID_INDEX: str = "main.fashion_demo.vs_hybrid_search"  # DELETED
+    # Vector Search Indexes (3 indexes for different search types)
+    VS_IMAGE_INDEX: str = "main.fashion_demo.vs_image_search"
+    VS_TEXT_INDEX: str = "main.fashion_demo.vs_text_search"
+    VS_HYBRID_INDEX: str = "main.fashion_demo.vs_hybrid_search"
 
     @property
     def CLIP_ENDPOINT_URL(self) -> str:
         """Full URL to CLIP model serving endpoint"""
         return f"{self.DATABRICKS_WORKSPACE_URL}/serving-endpoints/{self.CLIP_ENDPOINT_NAME}/invocations"
 
-    # Aliases for backward compatibility
+    # Aliases for backward compatibility (without LAKEBASE_ prefix)
     @property
     def PRODUCTS_TABLE(self) -> str:
         return self.LAKEBASE_PRODUCTS_TABLE
-
+    
     @property
     def USERS_TABLE(self) -> str:
         return self.LAKEBASE_USERS_TABLE
-
+    
     @property
     def EMBEDDINGS_TABLE(self) -> str:
-        """
-        Note: In fashion_sota, embeddings and products are in the SAME table
-        This returns the Unity Catalog table name
-        """
-        return self.UC_PRODUCT_EMBEDDINGS_TABLE
-
+        return self.UC_MULTIMODAL_TABLE
+    
     @property
     def USER_FEATURES_TABLE(self) -> str:
         return self.LAKEBASE_USER_FEATURES_TABLE
@@ -116,19 +105,6 @@ class Settings(BaseSettings):
     DEFAULT_PAGE_SIZE: int = 24
     MAX_PAGE_SIZE: int = 100
 
-    # Image Serving - UPDATED FOR FASHION_SOTA
-    @property
-    def IMAGE_VOLUME_PATH(self) -> str:
-        """Path to product images in Unity Catalog Volumes"""
-        return f"/Volumes/{self.CATALOG}/{self.SCHEMA}/product_images"
-
-    def get_image_url(self, product_id: int) -> str:
-        """
-        Construct Files API URL for product image
-        Updated for fashion_sota volume structure
-        """
-        return f"{self.DATABRICKS_WORKSPACE_URL}/ajax-api/2.0/fs/files{self.IMAGE_VOLUME_PATH}/{product_id}.jpg"
-
     @property
     def lakebase_sqlalchemy_url(self) -> str:
         """
@@ -140,7 +116,7 @@ class Settings(BaseSettings):
                 "Missing PGHOST/PGUSER env. Ensure the Lakebase resource is attached to the app "
                 "so the Postgres host and user are injected into the app environment."
             )
-
+        
         # Get fresh OAuth token
         try:
             token = workspace_client.config.oauth_token().access_token
@@ -148,7 +124,7 @@ class Settings(BaseSettings):
         except Exception as e:
             logger.error(f"❌ Failed to get OAuth token: {e}")
             raise
-
+        
         # Build connection string with token as password (asyncpg format)
         return (
             f"postgresql+asyncpg://{self.LAKEBASE_USER}:{token}@"
@@ -172,40 +148,3 @@ def get_bearer_headers() -> dict:
     """
     token = workspace_client.config.oauth_token().access_token
     return {"Authorization": f"Bearer {token}"}
-
-
-# ============================================================================
-# Migration Info
-# ============================================================================
-
-MIGRATION_INFO = {
-    "version": "2.0.0",
-    "schema": "fashion_sota",
-    "changes": [
-        "Migrated from main.fashion_demo to main.fashion_sota",
-        "Unified vector search index (1 index instead of 3)",
-        "Denormalized product embeddings (metadata + embeddings in one table)",
-        "Updated image volume path",
-        "Simplified table naming (removed 'db' suffix)",
-        "Added brand metadata",
-        "43,916 validated products (down from 44,424 - quality filtered)"
-    ],
-    "breaking_changes": [
-        "Vector search index names changed",
-        "Image URLs updated (new volume path)",
-        "Product IDs may differ (filtered dataset)",
-        "Lakebase schema changed to fashion_sota"
-    ]
-}
-
-# Log migration info on startup
-logger.info("=" * 80)
-logger.info("Fashion SOTA Configuration Active")
-logger.info("=" * 80)
-logger.info(f"Schema: {settings.SCHEMA}")
-logger.info(f"Lakebase Schema: {settings.LAKEBASE_SCHEMA}")
-logger.info(f"Products Table: {settings.LAKEBASE_PRODUCTS_TABLE}")
-logger.info(f"Vector Search Index: {settings.VS_INDEX}")
-logger.info(f"Vector Search Endpoint: {settings.VS_ENDPOINT_NAME}")
-logger.info(f"Image Volume: {settings.IMAGE_VOLUME_PATH}")
-logger.info("=" * 80)

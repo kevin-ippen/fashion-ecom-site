@@ -4,5 +4,5 @@ resources:
   uc_securable:
     # Grant app service principal READ access to UC volumes for image serving
     - securable_type: VOLUME
-      securable_full_name: main.fashion_demo.raw_data
+      securable_full_name: main.fashion_sota.product_images
       privilege: READ_VOLUME

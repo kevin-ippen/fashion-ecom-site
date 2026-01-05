@@ -19,20 +19,16 @@ class VectorSearchService:
         self.endpoint_name = settings.VS_ENDPOINT_NAME
         self.embedding_dim = settings.CLIP_EMBEDDING_DIM
 
-        # Three indexes for different search types
-        self.image_index = settings.VS_IMAGE_INDEX
-        self.text_index = settings.VS_TEXT_INDEX
-        self.hybrid_index = settings.VS_HYBRID_INDEX
+        # Unified index for all search types (image/text/hybrid)
+        self.index_name = settings.VS_INDEX
 
         self.workspace_host = settings.DATABRICKS_WORKSPACE_URL
         self._client = None
         self._index_cache = {}  # Cache index objects by name
 
-        logger.info(f"🔧 VectorSearchService initialized")
+        logger.info(f"🔧 VectorSearchService initialized (fashion_sota unified index)")
         logger.info(f"   Endpoint: {self.endpoint_name}")
-        logger.info(f"   Image Index: {self.image_index}")
-        logger.info(f"   Text Index: {self.text_index}")
-        logger.info(f"   Hybrid Index: {self.hybrid_index}")
+        logger.info(f"   Index: {self.index_name}")
 
     def _get_client(self) -> VectorSearchClient:
         """Get or create Vector Search client with OAuth authentication"""
@@ -203,6 +199,7 @@ class VectorSearchService:
     ) -> List[Dict[str, Any]]:
         """
         Search using image embeddings (visual similarity)
+        Uses unified index - works seamlessly with image embeddings
 
         Args:
             query_vector: Image embedding (512 dims)
@@ -214,7 +211,7 @@ class VectorSearchService:
         """
         return await self.search(
             query_vector=query_vector,
-            index_name=self.image_index,
+            index_name=self.index_name,  # Unified index
             num_results=num_results,
             filters=filters
         )
@@ -227,6 +224,7 @@ class VectorSearchService:
     ) -> List[Dict[str, Any]]:
         """
         Search using text embeddings (semantic text similarity)
+        Uses unified index - works seamlessly with text embeddings
 
         Args:
             query_vector: Text embedding (512 dims)
@@ -238,7 +236,7 @@ class VectorSearchService:
         """
         return await self.search(
             query_vector=query_vector,
-            index_name=self.text_index,
+            index_name=self.index_name,  # Unified index
             num_results=num_results,
             filters=filters
         )
@@ -251,6 +249,7 @@ class VectorSearchService:
     ) -> List[Dict[str, Any]]:
         """
         Search using hybrid embeddings (best overall quality)
+        Uses unified index - works seamlessly with hybrid embeddings
 
         Args:
             query_vector: Hybrid embedding (512 dims)
@@ -262,7 +261,7 @@ class VectorSearchService:
         """
         return await self.search(
             query_vector=query_vector,
-            index_name=self.hybrid_index,
+            index_name=self.index_name,  # Unified index
             num_results=num_results,
             filters=filters
         )
@@ -275,31 +274,25 @@ class VectorSearchService:
         filters: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Cross-modal search: text embedding → image index OR image embedding → text index
+        Cross-modal search (legacy method - unified index handles all modalities automatically)
+
+        With the unified index, cross-modal search is automatic since the index
+        contains hybrid embeddings that work across text and image modalities.
 
         Args:
             query_vector: Embedding (512 dims)
-            source_type: "text" (search image index) or "image" (search text index)
+            source_type: "text" or "image" (for logging only)
             num_results: Number of results
             filters: Optional filters
 
         Returns:
             List of cross-modal matching products
         """
-        # Cross-modal: Text query searches IMAGE index (find products that LOOK like the text)
-        if source_type == "text":
-            index_name = self.image_index
-            logger.info("🔀 Cross-modal: Text → Image index (find products that look like text)")
-        # Image query searches TEXT index (find products described by the image)
-        elif source_type == "image":
-            index_name = self.text_index
-            logger.info("🔀 Cross-modal: Image → Text index (find products described by image)")
-        else:
-            raise ValueError(f"source_type must be 'text' or 'image', got '{source_type}'")
+        logger.info(f"🔀 Cross-modal search ({source_type} query) using unified index")
 
         return await self.search(
             query_vector=query_vector,
-            index_name=index_name,
+            index_name=self.index_name,  # Unified index handles all modalities
             num_results=num_results,
             filters=filters
         )

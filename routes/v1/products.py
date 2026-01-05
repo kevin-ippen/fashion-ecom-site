@@ -19,7 +19,7 @@ WORKSPACE_HOST = settings.DATABRICKS_WORKSPACE_URL
 def get_image_url(product_id) -> str:
     """
     Construct direct Files API URL for product image
-    Pattern: https://{workspace-host}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{product_id}.jpg
+    Pattern: https://{workspace-host}/ajax-api/2.0/fs/files/Volumes/main/fashion_sota/product_images/{product_id}.jpg
 
     Args:
         product_id: Product ID (int, float, or string)
@@ -33,7 +33,7 @@ def get_image_url(product_id) -> str:
         logger.warning(f"Invalid product_id format: {product_id}, using as-is")
         pid = product_id
 
-    return f"{WORKSPACE_HOST}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{pid}.jpg"
+    return f"{WORKSPACE_HOST}/ajax-api/2.0/fs/files/Volumes/main/fashion_sota/product_images/{pid}.jpg"
 
 
 @router.get("", response_model=ProductListResponse)
