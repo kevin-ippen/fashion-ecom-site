@@ -56,9 +56,10 @@ class CLIPService:
         import aiohttp
 
         try:
-            # Prepare payload in dataframe_records format (pyfunc model)
+            # Prepare payload for multimodal endpoint (requires both image and text)
+            # For text-only: send empty string for image
             payload = {
-                "dataframe_records": [{"text": text}]
+                "dataframe_records": [{"text": text, "image": ""}]
             }
 
             logger.info(f"Calling CLIP text endpoint: '{text[:100]}...'")
@@ -105,9 +106,10 @@ class CLIPService:
             # Encode image to base64
             image_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
-            # Prepare payload in dataframe_records format (pyfunc model)
+            # Prepare payload for multimodal endpoint (requires both image and text)
+            # For image-only: send empty string for text
             payload = {
-                "dataframe_records": [{"image": image_b64}]
+                "dataframe_records": [{"image": image_b64, "text": ""}]
             }
 
             logger.info(f"Calling CLIP image endpoint (size: {len(image_bytes)} bytes)")
