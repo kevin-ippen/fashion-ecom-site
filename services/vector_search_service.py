@@ -102,20 +102,17 @@ class VectorSearchService:
             index = self._get_index(index_name)
 
             # Default columns if not specified
+            # IMPORTANT: Only request columns that exist in the index
+            # Index source: main.fashion_sota.product_embeddings
             if columns is None:
                 columns = [
                     "product_id",
                     "product_display_name",
                     "master_category",
                     "sub_category",
-                    "article_type",
-                    "base_color",
-                    "price",
-                    "image_path",
                     "gender",
-                    "season",
-                    "usage",
-                    "year"
+                    "base_color",
+                    "image_path"
                 ]
 
             # Perform similarity search (sync call, wrap in executor)
