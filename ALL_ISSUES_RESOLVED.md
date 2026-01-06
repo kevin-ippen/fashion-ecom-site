@@ -85,12 +85,77 @@ payload = {"dataframe_records": [{"text": text, "image": ""}]}  # Empty image fo
 payload = {"dataframe_records": [{"image": image_b64, "text": ""}]}  # Empty text for image-only
 ```
 
-### 6. ✅ Transaction Cascade Failures
+### 6. ✅ Multimodal Response Format
+**Error**: `TypeError: float() argument must be a string or a real number, not 'dict'`
+
+**Root Cause**: Multimodal endpoint returns array of dicts, not flat array
+
+**Response Format**:
+```json
+{
+  "predictions": [
+    {"embedding": [0.01, -0.02, ...]},  // First embedding (512-dim)
+    {"embedding": [0.03, -0.04, ...]}   // Second embedding (512-dim)
+  ]
+}
+```
+
+**Fix**: Updated parser to handle dict with `"embedding"` key
+```python
+# services/clip_service.py - Updated _parse_embedding()
+if isinstance(predictions[0], dict):
+    pred_dict = predictions[0]
+    if "embedding" in pred_dict:
+        embedding = np.array(pred_dict["embedding"], dtype=np.float32)
+```
+
+### 7. ✅ Transaction Cascade Failures
 **Error**: `current transaction is aborted, commands ignored until end of transaction block`
 
 **Root Cause**: First query failed → PostgreSQL aborted transaction → all subsequent queries failed
 
 **Fix**: Fixed root causes (permissions + table names) → transactions no longer abort
+
+### 8. ✅ Vector Search Column Mismatch
+**Error**: `BAD_REQUEST: Requested columns to fetch are not present in index: usage,price,year,season,article_type`
+
+**Root Cause**: Vector search service was requesting columns that don't exist in the vector index. The index syncs from `main.fashion_sota.product_embeddings` which only has basic metadata columns.
+
+**Available Columns in Index**:
+- product_id
+- product_display_name
+- master_category
+- sub_category
+- gender
+- base_color
+- image_path
+- embedding (512-dim vector)
+- l2_norm
+- created_at
+
+**Fix**: Updated vector search service to only request available columns
+```python
+# services/vector_search_service.py - Before
+columns = [
+    "product_id", "product_display_name", "master_category", "sub_category",
+    "article_type",  # ❌ Not in index
+    "base_color",
+    "price",         # ❌ Not in index
+    "image_path", "gender",
+    "season",        # ❌ Not in index
+    "usage",         # ❌ Not in index
+    "year"           # ❌ Not in index
+]
+
+# After
+columns = [
+    "product_id", "product_display_name",
+    "master_category", "sub_category",
+    "gender", "base_color", "image_path"
+]
+```
+
+**Impact**: Search results will have some fields as `null` (article_type, price, season, usage, year). These fields are `Optional` in the Product schema, so API won't crash. This is acceptable for search results focused on similarity/relevance.
 
 ---
 
@@ -128,16 +193,17 @@ IMAGE_VOLUME_PATH = "/Volumes/main/fashion_sota/product_images"  # Copy in progr
 
 | Commit | Description | Deployment ID | Notes |
 |--------|-------------|---------------|-------|
-| `7cd5120` | Add multimodal payload format (image + text) ⭐ | `01f0eb4367c91131ac2d16b257213848` ✅ | **FINAL WORKING** |
+| `db39330` | Fix vector search column mismatch ⭐ | `01f0eb458ac41ae7bc05903f73893883` ✅ | **CURRENT DEPLOYMENT** |
+| `f612d81` | Parse multimodal response with "embedding" key | `01f0eb44a3221c479d25e2aba46af2f7` ✅ | Fixed CLIP parsing |
+| `e79fcb2` | Add debug logging + dict response parsing | `01f0eb441aac16f1a7a73592aecb7d23` | Debug version |
+| `7cd5120` | Add multimodal payload format (image + text) | `01f0eb4367c91131ac2d16b257213848` | Fixed payload, wrong parser |
 | `74889b4` | Fix hardcoded CLIP endpoint in CLIPService | `01f0eb41be5c1a9e9df7c670899506a9` | Fixed endpoint, wrong payload |
 | `74889b4` | (Same fix, wrong file type) | `01f0eb4166e8114890a3d99ef9818238` ❌ | Broke imports (NOTEBOOK type) |
 | `74889b4` | (Same fix, not in workspace) | `01f0eb409faa164bb97b0260df04de06` ❌ | Workspace had old code |
-| `2803c9e` | Add comprehensive documentation | N/A (docs only) | - |
 | `77102f2` | Fix CLIP endpoint name in config | `01f0eb2dc5f21663ae8dbc935eb4a39b` | Config only (service ignored it) |
 | `ca60942` | Fix table names (users_lakebase) | `01f0eb258cfe132cb34af5ec68f1172a` | - |
-| `1f996d6` | Fix Lakebase connection params | Previous | - |
 
-**Current Status**: ✅ **DEPLOYED** (2026-01-06 21:06:12 UTC)
+**Current Status**: ✅ **DEPLOYED** (2026-01-06 21:15:00 UTC)
 
 ### ⚠️ Deployment Gotcha Learned (Critical!)
 
@@ -370,7 +436,9 @@ python3 <script_name>.py
 3. ❌ Config pointing to wrong CLIP endpoint (`siglip-multimodal-endpoint` vs `fashionclip-endpoint`)
 4. ❌ **CLIPService hardcoded endpoint names (ignored config)** ⚠️ CRITICAL
 5. ❌ **Payload missing required fields for multimodal endpoint** ⚠️ CRITICAL
-6. ❌ Transaction cascade failures from initial errors
+6. ❌ **Multimodal response parsing (dict with "embedding" key)** ⚠️ CRITICAL
+7. ❌ **Vector search requesting columns that don't exist in index** ⚠️ CRITICAL
+8. ❌ Transaction cascade failures from initial errors
 
 ### What's Fixed
 1. ✅ All permissions granted (products + users tables)
@@ -378,8 +446,10 @@ python3 <script_name>.py
 3. ✅ CLIP endpoint corrected in config (fashionclip-endpoint)
 4. ✅ **CLIPService now reads from config instead of hardcoded values** ⭐
 5. ✅ **Payload includes both image and text fields for multimodal endpoint** ⭐
-6. ✅ Vector search configured (fashion-vector-search, main.fashion_sota.product_embeddings_index)
-7. ✅ App deployed with all fixes
+6. ✅ **Multimodal response parsing handles dict format with "embedding" key** ⭐
+7. ✅ **Vector search only requests columns that exist in index** ⭐
+8. ✅ Vector search configured (fashion-vector-search, main.fashion_sota.product_embeddings_index)
+9. ✅ App deployed with all fixes
 
 ### Current Status
 - ✅ **App Running**: https://ecom-visual-search-984752964297111.11.azure.databricksapps.com
@@ -403,6 +473,6 @@ python3 <script_name>.py
 
 ---
 
-**Fixed**: 2026-01-06 21:06 UTC
-**Deployment**: 01f0eb4367c91131ac2d16b257213848 (multimodal payload fix)
-**Git**: 7cd5120 (final working version)
+**Fixed**: 2026-01-06 21:21 UTC
+**Deployment**: 01f0eb458ac41ae7bc05903f73893883 (vector search column fix)
+**Git**: db39330 (current deployment)
