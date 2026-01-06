@@ -109,36 +109,49 @@ IMAGE_VOLUME_PATH = "/Volumes/main/fashion_sota/product_images"  # Copy in progr
 
 ## 🚀 Deployment History
 
-| Commit | Description | Deployment ID |
-|--------|-------------|---------------|
-| `74889b4` | Fix hardcoded CLIP endpoint in CLIPService ⭐ | `01f0eb4166e8114890a3d99ef9818238` ✅ |
-| `2803c9e` | Add comprehensive documentation | N/A (docs only) |
-| `77102f2` | Fix CLIP endpoint name in config | `01f0eb2dc5f21663ae8dbc935eb4a39b` |
-| `ca60942` | Fix table names (users_lakebase) | `01f0eb258cfe132cb34af5ec68f1172a` |
-| `1f996d6` | Fix Lakebase connection params | Previous |
+| Commit | Description | Deployment ID | Notes |
+|--------|-------------|---------------|-------|
+| `74889b4` | Fix hardcoded CLIP endpoint in CLIPService ⭐ | `01f0eb41be5c1a9e9df7c670899506a9` ✅ | Final working deployment |
+| `74889b4` | (Same fix, wrong file type) | `01f0eb4166e8114890a3d99ef9818238` ❌ | Broke imports (NOTEBOOK type) |
+| `74889b4` | (Same fix, not in workspace) | `01f0eb409faa164bb97b0260df04de06` ❌ | Workspace had old code |
+| `2803c9e` | Add comprehensive documentation | N/A (docs only) | - |
+| `77102f2` | Fix CLIP endpoint name in config | `01f0eb2dc5f21663ae8dbc935eb4a39b` | Config only (service ignored it) |
+| `ca60942` | Fix table names (users_lakebase) | `01f0eb258cfe132cb34af5ec68f1172a` | - |
+| `1f996d6` | Fix Lakebase connection params | Previous | - |
 
-**Current Status**: ✅ **DEPLOYED** (2026-01-06 20:51:51 UTC)
+**Current Status**: ✅ **DEPLOYED** (2026-01-06 20:54:17 UTC)
 
-### ⚠️ Deployment Gotcha Learned
+### ⚠️ Deployment Gotcha Learned (Critical!)
 
-**Issue**: First deployment of CLIPService fix (`01f0eb409faa164bb97b0260df04de06`) didn't work!
+**Issue #1**: First deployment (`01f0eb409faa164bb97b0260df04de06`) didn't work - workspace had old code!
 
 **Why**: `databricks apps deploy` deploys from **Workspace**, not from local files or GitHub.
 
-**Fix Required**:
+**Issue #2**: Second deployment (`01f0eb4166e8114890a3d99ef9818238`) broke imports - wrong file type!
+
+**Why**: Using `--format SOURCE --language PYTHON` created a NOTEBOOK instead of a FILE, breaking Python imports.
+
+**Complete Fix Required**:
 1. Edit local file ✅
 2. Commit to GitHub ✅
-3. **Upload to Workspace** ✅ (CRITICAL STEP!)
+3. **Upload to Workspace with CORRECT format** ✅ (CRITICAL!)
    ```bash
+   # ❌ WRONG - Creates NOTEBOOK type (breaks imports)
+   databricks workspace import --file services/clip_service.py --format SOURCE --language PYTHON ...
+
+   # ✅ CORRECT - Creates FILE type (preserves imports)
    databricks workspace delete /Workspace/.../services/clip_service.py --profile work
-   databricks workspace import --file services/clip_service.py --format SOURCE --language PYTHON /Workspace/.../services/clip_service.py --profile work
+   databricks workspace import --file services/clip_service.py --format AUTO /Workspace/.../services/clip_service.py --profile work
    ```
 4. Deploy from Workspace ✅
    ```bash
    databricks apps deploy ecom-visual-search --profile work
    ```
 
-**Lesson**: Always verify workspace has the latest code before deploying!
+**Lessons**:
+1. Always verify workspace has the latest code before deploying
+2. Use `--format AUTO` for Python files to preserve correct file type
+3. Verify file type with `databricks workspace list` (should be FILE, not NOTEBOOK)
 
 ---
 
@@ -370,6 +383,6 @@ python3 <script_name>.py
 
 ---
 
-**Fixed**: 2026-01-06 20:51 UTC
-**Deployment**: 01f0eb4166e8114890a3d99ef9818238 (workspace synced + deployed)
+**Fixed**: 2026-01-06 20:54 UTC
+**Deployment**: 01f0eb41be5c1a9e9df7c670899506a9 (FILE type fix + deployed)
 **Git**: 74889b4 (critical CLIPService fix)
