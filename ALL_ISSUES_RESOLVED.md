@@ -68,7 +68,24 @@ self.image_endpoint_name = settings.CLIP_ENDPOINT_NAME
 
 **Impact**: This was the ACTUAL bug - config changes had no effect until CLIPService was fixed!
 
-### 5. ✅ Transaction Cascade Failures
+### 5. ✅ Multimodal Payload Format
+**Error**: `BAD_REQUEST: Model is missing inputs ['image']`
+
+**Root Cause**: `fashionclip-endpoint` is a multimodal endpoint requiring BOTH `image` and `text` fields in payload
+
+**Fix**: Updated payload format to include both fields
+```python
+# services/clip_service.py - Before
+payload = {"dataframe_records": [{"text": text}]}  # Missing image field!
+
+# After - Text search
+payload = {"dataframe_records": [{"text": text, "image": ""}]}  # Empty image for text-only
+
+# After - Image search
+payload = {"dataframe_records": [{"image": image_b64, "text": ""}]}  # Empty text for image-only
+```
+
+### 6. ✅ Transaction Cascade Failures
 **Error**: `current transaction is aborted, commands ignored until end of transaction block`
 
 **Root Cause**: First query failed → PostgreSQL aborted transaction → all subsequent queries failed
@@ -111,7 +128,8 @@ IMAGE_VOLUME_PATH = "/Volumes/main/fashion_sota/product_images"  # Copy in progr
 
 | Commit | Description | Deployment ID | Notes |
 |--------|-------------|---------------|-------|
-| `74889b4` | Fix hardcoded CLIP endpoint in CLIPService ⭐ | `01f0eb41be5c1a9e9df7c670899506a9` ✅ | Final working deployment |
+| `7cd5120` | Add multimodal payload format (image + text) ⭐ | `01f0eb4367c91131ac2d16b257213848` ✅ | **FINAL WORKING** |
+| `74889b4` | Fix hardcoded CLIP endpoint in CLIPService | `01f0eb41be5c1a9e9df7c670899506a9` | Fixed endpoint, wrong payload |
 | `74889b4` | (Same fix, wrong file type) | `01f0eb4166e8114890a3d99ef9818238` ❌ | Broke imports (NOTEBOOK type) |
 | `74889b4` | (Same fix, not in workspace) | `01f0eb409faa164bb97b0260df04de06` ❌ | Workspace had old code |
 | `2803c9e` | Add comprehensive documentation | N/A (docs only) | - |
@@ -119,7 +137,7 @@ IMAGE_VOLUME_PATH = "/Volumes/main/fashion_sota/product_images"  # Copy in progr
 | `ca60942` | Fix table names (users_lakebase) | `01f0eb258cfe132cb34af5ec68f1172a` | - |
 | `1f996d6` | Fix Lakebase connection params | Previous | - |
 
-**Current Status**: ✅ **DEPLOYED** (2026-01-06 20:54:17 UTC)
+**Current Status**: ✅ **DEPLOYED** (2026-01-06 21:06:12 UTC)
 
 ### ⚠️ Deployment Gotcha Learned (Critical!)
 
@@ -351,15 +369,17 @@ python3 <script_name>.py
 2. ❌ Config pointing to wrong table name (`user_preferences` vs `users_lakebase`)
 3. ❌ Config pointing to wrong CLIP endpoint (`siglip-multimodal-endpoint` vs `fashionclip-endpoint`)
 4. ❌ **CLIPService hardcoded endpoint names (ignored config)** ⚠️ CRITICAL
-5. ❌ Transaction cascade failures from initial errors
+5. ❌ **Payload missing required fields for multimodal endpoint** ⚠️ CRITICAL
+6. ❌ Transaction cascade failures from initial errors
 
 ### What's Fixed
 1. ✅ All permissions granted (products + users tables)
 2. ✅ Table names corrected (users_lakebase for both users and features)
 3. ✅ CLIP endpoint corrected in config (fashionclip-endpoint)
 4. ✅ **CLIPService now reads from config instead of hardcoded values** ⭐
-5. ✅ Vector search configured (fashion-vector-search, main.fashion_sota.product_embeddings_index)
-6. ✅ App deployed with all fixes
+5. ✅ **Payload includes both image and text fields for multimodal endpoint** ⭐
+6. ✅ Vector search configured (fashion-vector-search, main.fashion_sota.product_embeddings_index)
+7. ✅ App deployed with all fixes
 
 ### Current Status
 - ✅ **App Running**: https://ecom-visual-search-984752964297111.11.azure.databricksapps.com
@@ -383,6 +403,6 @@ python3 <script_name>.py
 
 ---
 
-**Fixed**: 2026-01-06 20:54 UTC
-**Deployment**: 01f0eb41be5c1a9e9df7c670899506a9 (FILE type fix + deployed)
-**Git**: 74889b4 (critical CLIPService fix)
+**Fixed**: 2026-01-06 21:06 UTC
+**Deployment**: 01f0eb4367c91131ac2d16b257213848 (multimodal payload fix)
+**Git**: 7cd5120 (final working version)
