@@ -36,7 +36,7 @@ LAKEBASE_USERS_TABLE = "users_lakebase"  # Combined table
 LAKEBASE_USER_FEATURES_TABLE = "users_lakebase"  # Same table
 ```
 
-### 3. ✅ Wrong CLIP Endpoint
+### 3. ✅ Wrong CLIP Endpoint (Config)
 **Error**: `ENDPOINT_NOT_FOUND: The given endpoint does not exist`
 
 **Root Cause**: Config had `siglip-multimodal-endpoint` but actual endpoint is `fashionclip-endpoint`
@@ -50,7 +50,25 @@ CLIP_ENDPOINT_NAME = "siglip-multimodal-endpoint"
 CLIP_ENDPOINT_NAME = "fashionclip-endpoint"
 ```
 
-### 4. ✅ Transaction Cascade Failures
+### 4. ✅ Hardcoded CLIP Endpoint (Critical)
+**Error**: App still using `siglip-multimodal-endpoint` even after config fix
+
+**Root Cause**: `CLIPService.__init__()` had hardcoded endpoint names that ignored `settings.CLIP_ENDPOINT_NAME`
+
+**Fix**: Updated CLIPService to read from config
+```python
+# services/clip_service.py - Before
+self.text_endpoint_name = "siglip-multimodal-endpoint"
+self.image_endpoint_name = "siglip-multimodal-endpoint"
+
+# After
+self.text_endpoint_name = settings.CLIP_ENDPOINT_NAME
+self.image_endpoint_name = settings.CLIP_ENDPOINT_NAME
+```
+
+**Impact**: This was the ACTUAL bug - config changes had no effect until CLIPService was fixed!
+
+### 5. ✅ Transaction Cascade Failures
 **Error**: `current transaction is aborted, commands ignored until end of transaction block`
 
 **Root Cause**: First query failed → PostgreSQL aborted transaction → all subsequent queries failed
@@ -93,11 +111,13 @@ IMAGE_VOLUME_PATH = "/Volumes/main/fashion_sota/product_images"  # Copy in progr
 
 | Commit | Description | Deployment ID |
 |--------|-------------|---------------|
-| `77102f2` | Fix CLIP endpoint name | `01f0eb2dc5f21663ae8dbc935eb4a39b` ✅ |
+| `74889b4` | Fix hardcoded CLIP endpoint in CLIPService ⭐ | `01f0eb409faa164bb97b0260df04de06` ✅ |
+| `2803c9e` | Add comprehensive documentation | N/A (docs only) |
+| `77102f2` | Fix CLIP endpoint name in config | `01f0eb2dc5f21663ae8dbc935eb4a39b` |
 | `ca60942` | Fix table names (users_lakebase) | `01f0eb258cfe132cb34af5ec68f1172a` |
 | `1f996d6` | Fix Lakebase connection params | Previous |
 
-**Current Status**: ✅ **DEPLOYED** (2026-01-06 18:30:50 UTC)
+**Current Status**: ✅ **DEPLOYED** (2026-01-06 20:45:48 UTC)
 
 ---
 
@@ -296,14 +316,16 @@ python3 <script_name>.py
 1. ❌ Service principal missing permissions on `users_lakebase`
 2. ❌ Config pointing to wrong table name (`user_preferences` vs `users_lakebase`)
 3. ❌ Config pointing to wrong CLIP endpoint (`siglip-multimodal-endpoint` vs `fashionclip-endpoint`)
-4. ❌ Transaction cascade failures from initial errors
+4. ❌ **CLIPService hardcoded endpoint names (ignored config)** ⚠️ CRITICAL
+5. ❌ Transaction cascade failures from initial errors
 
 ### What's Fixed
 1. ✅ All permissions granted (products + users tables)
 2. ✅ Table names corrected (users_lakebase for both users and features)
-3. ✅ CLIP endpoint corrected (fashionclip-endpoint)
-4. ✅ Vector search configured (fashion-vector-search, main.fashion_sota.product_embeddings_index)
-5. ✅ App deployed with all fixes
+3. ✅ CLIP endpoint corrected in config (fashionclip-endpoint)
+4. ✅ **CLIPService now reads from config instead of hardcoded values** ⭐
+5. ✅ Vector search configured (fashion-vector-search, main.fashion_sota.product_embeddings_index)
+6. ✅ App deployed with all fixes
 
 ### Current Status
 - ✅ **App Running**: https://ecom-visual-search-984752964297111.11.azure.databricksapps.com
@@ -327,6 +349,6 @@ python3 <script_name>.py
 
 ---
 
-**Fixed**: 2026-01-06 18:30 UTC
-**Deployment**: 01f0eb2dc5f21663ae8dbc935eb4a39b
-**Git**: 77102f2
+**Fixed**: 2026-01-06 20:45 UTC
+**Deployment**: 01f0eb409faa164bb97b0260df04de06
+**Git**: 74889b4 (critical CLIPService fix)
