@@ -212,13 +212,14 @@ class CLIPService:
             predictions = result["predictions"]
             if isinstance(predictions, list) and len(predictions) > 0:
                 if is_nested:
-                    # Check if it's a dict with text/image embeddings (multimodal endpoint)
+                    # Check if it's a dict with embeddings (multimodal endpoint)
                     if isinstance(predictions[0], dict):
-                        # Multimodal endpoint returns: [{"text_embedding": [...], "image_embedding": [...]}]
-                        # Or: [{"text": [...], "image": [...]}]
+                        # Multimodal endpoint returns: [{"embedding": [...]}]
                         pred_dict = predictions[0]
-                        # Try different key names
-                        if "text_embedding" in pred_dict:
+                        # Try different key names (most common first)
+                        if "embedding" in pred_dict:
+                            embedding = np.array(pred_dict["embedding"], dtype=np.float32)
+                        elif "text_embedding" in pred_dict:
                             embedding = np.array(pred_dict["text_embedding"], dtype=np.float32)
                         elif "image_embedding" in pred_dict:
                             embedding = np.array(pred_dict["image_embedding"], dtype=np.float32)
