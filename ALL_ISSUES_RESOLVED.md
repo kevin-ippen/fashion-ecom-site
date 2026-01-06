@@ -111,13 +111,34 @@ IMAGE_VOLUME_PATH = "/Volumes/main/fashion_sota/product_images"  # Copy in progr
 
 | Commit | Description | Deployment ID |
 |--------|-------------|---------------|
-| `74889b4` | Fix hardcoded CLIP endpoint in CLIPService ⭐ | `01f0eb409faa164bb97b0260df04de06` ✅ |
+| `74889b4` | Fix hardcoded CLIP endpoint in CLIPService ⭐ | `01f0eb4166e8114890a3d99ef9818238` ✅ |
 | `2803c9e` | Add comprehensive documentation | N/A (docs only) |
 | `77102f2` | Fix CLIP endpoint name in config | `01f0eb2dc5f21663ae8dbc935eb4a39b` |
 | `ca60942` | Fix table names (users_lakebase) | `01f0eb258cfe132cb34af5ec68f1172a` |
 | `1f996d6` | Fix Lakebase connection params | Previous |
 
-**Current Status**: ✅ **DEPLOYED** (2026-01-06 20:45:48 UTC)
+**Current Status**: ✅ **DEPLOYED** (2026-01-06 20:51:51 UTC)
+
+### ⚠️ Deployment Gotcha Learned
+
+**Issue**: First deployment of CLIPService fix (`01f0eb409faa164bb97b0260df04de06`) didn't work!
+
+**Why**: `databricks apps deploy` deploys from **Workspace**, not from local files or GitHub.
+
+**Fix Required**:
+1. Edit local file ✅
+2. Commit to GitHub ✅
+3. **Upload to Workspace** ✅ (CRITICAL STEP!)
+   ```bash
+   databricks workspace delete /Workspace/.../services/clip_service.py --profile work
+   databricks workspace import --file services/clip_service.py --format SOURCE --language PYTHON /Workspace/.../services/clip_service.py --profile work
+   ```
+4. Deploy from Workspace ✅
+   ```bash
+   databricks apps deploy ecom-visual-search --profile work
+   ```
+
+**Lesson**: Always verify workspace has the latest code before deploying!
 
 ---
 
@@ -349,6 +370,6 @@ python3 <script_name>.py
 
 ---
 
-**Fixed**: 2026-01-06 20:45 UTC
-**Deployment**: 01f0eb409faa164bb97b0260df04de06
+**Fixed**: 2026-01-06 20:51 UTC
+**Deployment**: 01f0eb4166e8114890a3d99ef9818238 (workspace synced + deployed)
 **Git**: 74889b4 (critical CLIPService fix)
