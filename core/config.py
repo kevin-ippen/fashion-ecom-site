@@ -42,11 +42,11 @@ class Settings(BaseSettings):
     UC_USERS_TABLE: str = "main.fashion_sota.users"  # User accounts
     UC_USER_PREFERENCES_TABLE: str = "main.fashion_sota.user_preferences"  # User preferences
 
-    # Legacy Lakebase config (for backward compatibility)
+    # Lakebase table names (PostgreSQL schema.table format)
     LAKEBASE_SCHEMA: str = "fashion_sota"
     LAKEBASE_PRODUCTS_TABLE: str = "products_lakebase"
-    LAKEBASE_USERS_TABLE: str = "users"
-    LAKEBASE_USER_FEATURES_TABLE: str = "user_preferences"
+    LAKEBASE_USERS_TABLE: str = "users_lakebase"  # Combined users + features table
+    LAKEBASE_USER_FEATURES_TABLE: str = "users_lakebase"  # Same as users table (combined)
 
     # Databricks Workspace
     @property
