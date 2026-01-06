@@ -79,6 +79,14 @@ class CLIPService:
 
                     result = await response.json()
 
+            # Log response structure for debugging
+            logger.info(f"CLIP response structure: {type(result)}, keys: {result.keys() if isinstance(result, dict) else 'N/A'}")
+            if isinstance(result, dict) and "predictions" in result:
+                pred = result["predictions"]
+                logger.info(f"Predictions type: {type(pred)}, first item type: {type(pred[0]) if isinstance(pred, list) and len(pred) > 0 else 'N/A'}")
+                if isinstance(pred, list) and len(pred) > 0 and isinstance(pred[0], dict):
+                    logger.info(f"First prediction keys: {pred[0].keys()}")
+
             # Parse and normalize embedding
             # clip-multimodal-encoder returns: {"predictions": [[0.01, 0.02, ...]]}
             embedding = self._parse_embedding(result, is_nested=True)
@@ -204,8 +212,25 @@ class CLIPService:
             predictions = result["predictions"]
             if isinstance(predictions, list) and len(predictions) > 0:
                 if is_nested:
+                    # Check if it's a dict with text/image embeddings (multimodal endpoint)
+                    if isinstance(predictions[0], dict):
+                        # Multimodal endpoint returns: [{"text_embedding": [...], "image_embedding": [...]}]
+                        # Or: [{"text": [...], "image": [...]}]
+                        pred_dict = predictions[0]
+                        # Try different key names
+                        if "text_embedding" in pred_dict:
+                            embedding = np.array(pred_dict["text_embedding"], dtype=np.float32)
+                        elif "image_embedding" in pred_dict:
+                            embedding = np.array(pred_dict["image_embedding"], dtype=np.float32)
+                        elif "text" in pred_dict:
+                            embedding = np.array(pred_dict["text"], dtype=np.float32)
+                        elif "image" in pred_dict:
+                            embedding = np.array(pred_dict["image"], dtype=np.float32)
+                        else:
+                            # Log available keys for debugging
+                            logger.error(f"Unknown multimodal response keys: {pred_dict.keys()}")
                     # Nested array: [[0.0121, 0.0134, ...]]
-                    if isinstance(predictions[0], list):
+                    elif isinstance(predictions[0], list):
                         embedding = np.array(predictions[0], dtype=np.float32)
                     else:
                         # Fallback: treat as flat
