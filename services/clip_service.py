@@ -17,9 +17,9 @@ class CLIPService:
     """Service for interacting with CLIP model serving endpoints"""
 
     def __init__(self):
-        # Two separate endpoints for text and image
-        self.text_endpoint_name = "siglip-multimodal-endpoint"
-        self.image_endpoint_name = "siglip-multimodal-endpoint"
+        # Use configured CLIP endpoint for both text and image
+        self.text_endpoint_name = settings.CLIP_ENDPOINT_NAME
+        self.image_endpoint_name = settings.CLIP_ENDPOINT_NAME
         
         # Construct URLs
         base_url = settings.DATABRICKS_WORKSPACE_URL.rstrip('/')
