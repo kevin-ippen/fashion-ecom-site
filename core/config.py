@@ -69,8 +69,8 @@ class Settings(BaseSettings):
         # Final fallback to hardcoded default
         return "https://adb-984752964297111.11.azuredatabricks.net"
 
-    # CLIP Multimodal Model Serving (no change - still works with FashionCLIP 2.0)
-    CLIP_ENDPOINT_NAME: str = "siglip-multimodal-endpoint"
+    # CLIP Multimodal Model Serving
+    CLIP_ENDPOINT_NAME: str = "fashionclip-endpoint"  # FashionCLIP endpoint
     CLIP_UC_MODEL: str = "main.fashion_demo.clip_multimodal_encoder"  # Still in fashion_demo
     CLIP_EMBEDDING_DIM: int = 512
 
