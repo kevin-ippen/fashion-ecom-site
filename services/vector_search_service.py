@@ -23,8 +23,6 @@ class VectorSearchService:
         self.index_name = settings.VS_INDEX
 
         self.workspace_host = settings.DATABRICKS_WORKSPACE_URL
-        self._client = None
-        self._index_cache = {}  # Cache index objects by name
 
         logger.info(f"🔧 VectorSearchService initialized (fashion_sota unified index)")
         logger.info(f"   Endpoint: {self.endpoint_name}")
@@ -32,34 +30,34 @@ class VectorSearchService:
 
     def _get_client(self) -> VectorSearchClient:
         """Get or create Vector Search client with OAuth authentication"""
-        if self._client is None:
-            # Get OAuth token from WorkspaceClient
-            w = WorkspaceClient()
-            token = w.config.oauth_token().access_token
+        # ALWAYS get a fresh OAuth token (they expire after ~1 hour)
+        # Don't cache the client to avoid stale token issues
+        w = WorkspaceClient()
+        token = w.config.oauth_token().access_token
 
-            # Pass token explicitly to VectorSearchClient
-            self._client = VectorSearchClient(
-                workspace_url=self.workspace_host,
-                personal_access_token=token,
-                disable_notice=True
-            )
-            logger.info(f"✅ Created Vector Search client for {self.workspace_host}")
-        return self._client
+        # Pass token explicitly to VectorSearchClient
+        client = VectorSearchClient(
+            workspace_url=self.workspace_host,
+            personal_access_token=token,
+            disable_notice=True
+        )
+        logger.debug(f"✅ Created Vector Search client with fresh OAuth token")
+        return client
 
     def _get_index(self, index_name: str):
-        """Get Vector Search index by name (with caching)"""
-        if index_name not in self._index_cache:
-            logger.info(f"🔍 Getting Vector Search index: '{index_name}'")
+        """Get Vector Search index by name (no caching to avoid stale tokens)"""
+        logger.debug(f"🔍 Getting Vector Search index: '{index_name}'")
 
-            if not index_name:
-                raise ValueError("Index name is empty or None!")
+        if not index_name:
+            raise ValueError("Index name is empty or None!")
 
-            client = self._get_client()
-            self._index_cache[index_name] = client.get_index(index_name=index_name)
+        # Always get fresh client with fresh OAuth token
+        client = self._get_client()
+        index = client.get_index(index_name=index_name)
 
-            logger.info(f"✅ Connected to Vector Search index: {index_name}")
+        logger.debug(f"✅ Connected to Vector Search index: {index_name}")
 
-        return self._index_cache[index_name]
+        return index
 
     async def search(
         self,
