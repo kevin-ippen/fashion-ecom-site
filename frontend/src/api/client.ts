@@ -38,6 +38,20 @@ export const productsApi = {
     const response = await apiClient.get('/products/filters/options');
     return response.data;
   },
+
+  getSimilar: async (productId: string, limit = 6): Promise<ProductListResponse> => {
+    const response = await apiClient.get(`/products/${productId}/similar`, {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  getCompleteTheLook: async (productId: string, limit = 4): Promise<ProductListResponse> => {
+    const response = await apiClient.get(`/products/${productId}/complete-the-look`, {
+      params: { limit },
+    });
+    return response.data;
+  },
 };
 
 export const usersApi = {

@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ShoppingCart, Heart, Star, Package, Truck, Shield } from 'lucide-react';
-import { productsApi, searchApi } from '@/api/client';
+import { productsApi } from '@/api/client';
 import { useCartStore } from '@/stores/cartStore';
 import { usePersonaStore } from '@/stores/personaStore';
 import { Button } from '@/components/ui/Button';
@@ -23,20 +23,26 @@ export function ProductDetail() {
     enabled: !!productId,
   });
 
-  // Fetch similar products (recommendations if persona selected, otherwise random)
-  const { data: similarProducts } = useQuery({
-    queryKey: ['similar-products', productId, selectedPersona?.user_id],
+  // Fetch similar products (visual similarity)
+  const { data: similarProductsResponse } = useQuery({
+    queryKey: ['similar-products', productId],
     queryFn: async () => {
-      if (selectedPersona) {
-        const response = await searchApi.getRecommendations(selectedPersona.user_id, 4);
-        return response.products.filter(p => p.product_id !== productId);
-      } else {
-        const response = await productsApi.list({ page: 1, page_size: 4 });
-        return response.products.filter(p => p.product_id !== productId);
-      }
+      return await productsApi.getSimilar(productId!, 6);
     },
     enabled: !!productId,
   });
+
+  // Fetch complete-the-look products (outfit pairings)
+  const { data: completeTheLookResponse } = useQuery({
+    queryKey: ['complete-the-look', productId],
+    queryFn: async () => {
+      return await productsApi.getCompleteTheLook(productId!, 4);
+    },
+    enabled: !!productId,
+  });
+
+  const similarProducts = similarProductsResponse?.products || [];
+  const completeTheLookProducts = completeTheLookResponse?.products || [];
 
   const handleAddToCart = () => {
     if (product) {
@@ -215,15 +221,30 @@ export function ProductDetail() {
           </div>
         </div>
 
-        {/* Similar products */}
+        {/* Similar products - Visual similarity */}
         {similarProducts && similarProducts.length > 0 && (
           <div className="mt-16">
-            <h2 className="mb-6 text-2xl font-bold">
-              {selectedPersona ? 'You Might Also Like' : 'Similar Products'}
-            </h2>
+            <h2 className="mb-6 text-2xl font-bold">You Might Also Like</h2>
+            <p className="mb-4 text-sm text-gray-600">
+              Visually similar products based on style and appearance
+            </p>
             <ProductGrid
               products={similarProducts}
-              showPersonalization={!!selectedPersona}
+              showPersonalization={false}
+            />
+          </div>
+        )}
+
+        {/* Complete the Look - Outfit pairings */}
+        {completeTheLookProducts && completeTheLookProducts.length > 0 && (
+          <div className="mt-16">
+            <h2 className="mb-6 text-2xl font-bold">Complete the Look</h2>
+            <p className="mb-4 text-sm text-gray-600">
+              Products from styled outfits that pair well together
+            </p>
+            <ProductGrid
+              products={completeTheLookProducts}
+              showPersonalization={false}
             />
           </div>
         )}

@@ -193,7 +193,8 @@ IMAGE_VOLUME_PATH = "/Volumes/main/fashion_sota/product_images"  # Copy in progr
 
 | Commit | Description | Deployment ID | Notes |
 |--------|-------------|---------------|-------|
-| `db39330` | Fix vector search column mismatch ⭐ | `01f0eb458ac41ae7bc05903f73893883` ✅ | **CURRENT DEPLOYMENT** |
+| `15f4dbf` | Add similar + complete-the-look endpoints ⭐ | `01f0eb62d7db10698dcf168e93370911` ✅ | **CURRENT DEPLOYMENT** |
+| `db39330` | Fix vector search column mismatch ⭐ | `01f0eb458ac41ae7bc05903f73893883` ✅ | - |
 | `f612d81` | Parse multimodal response with "embedding" key | `01f0eb44a3221c479d25e2aba46af2f7` ✅ | Fixed CLIP parsing |
 | `e79fcb2` | Add debug logging + dict response parsing | `01f0eb441aac16f1a7a73592aecb7d23` | Debug version |
 | `7cd5120` | Add multimodal payload format (image + text) | `01f0eb4367c91131ac2d16b257213848` | Fixed payload, wrong parser |
@@ -203,7 +204,7 @@ IMAGE_VOLUME_PATH = "/Volumes/main/fashion_sota/product_images"  # Copy in progr
 | `77102f2` | Fix CLIP endpoint name in config | `01f0eb2dc5f21663ae8dbc935eb4a39b` | Config only (service ignored it) |
 | `ca60942` | Fix table names (users_lakebase) | `01f0eb258cfe132cb34af5ec68f1172a` | - |
 
-**Current Status**: ✅ **DEPLOYED** (2026-01-06 21:15:00 UTC)
+**Current Status**: ✅ **DEPLOYED** (2026-01-07 00:50:48 UTC) - **Includes recommendations feature**
 
 ### ⚠️ Deployment Gotcha Learned (Critical!)
 
@@ -307,6 +308,24 @@ Body: (multipart/form-data with image file)
 - Searches: `main.fashion_sota.product_embeddings_index`
 - Returns: Visually similar products
 
+### 5. Similar Products (NEW!) ✅
+```
+GET /api/v1/products/{product_id}/similar?limit=6
+```
+- Uses: Vector similarity on `main.fashion_sota.product_embeddings_index`
+- Filters: Category compatibility (no duplicate types)
+- Diversifies: Best-effort color diversity (round-robin)
+- Returns: 6 visually similar products
+
+### 6. Complete the Look (NEW!) ✅
+```
+GET /api/v1/products/{product_id}/complete-the-look?limit=4
+```
+- Queries: `main.fashion_sota.outfit_recommendations_filtered`
+- Based on: Brand lookbook outfit pairings (2.8M pairs from 29 images)
+- Coverage: 70.5% of products (21,333 products)
+- Returns: 4 complementary products with co-occurrence context
+
 ---
 
 ## 📱 Test Your App
@@ -318,8 +337,10 @@ Body: (multipart/form-data with image file)
 1. **Browse Products** - Filter by category, price, color
 2. **Text Search** - Search "party shirt", "running shoes", etc.
 3. **Image Upload** - Upload fashion image for visual search
-4. **Recommendations** - Get personalized recommendations for test users
-5. **User Profiles** - View user preferences and style profiles
+4. **User Recommendations** - Get personalized recommendations for test users
+5. **Similar Products (NEW!)** - Get visually similar products for any item
+6. **Complete the Look (NEW!)** - Get outfit pairing suggestions
+7. **User Profiles** - View user preferences and style profiles
 
 ### API Documentation
 
@@ -467,12 +488,14 @@ python3 <script_name>.py
 - ✅ Text-based semantic search
 - ✅ Image-based visual search
 - ✅ Personalized user recommendations
+- ✅ Similar products (visual similarity)
+- ✅ Complete the look (outfit pairings)
 - ⏳ Product images (working once copy completes)
 
 **Test your app now!** All the errors you showed should be resolved. 🚀
 
 ---
 
-**Fixed**: 2026-01-06 21:21 UTC
-**Deployment**: 01f0eb458ac41ae7bc05903f73893883 (vector search column fix)
-**Git**: db39330 (current deployment)
+**Fixed**: 2026-01-07 00:50:48 UTC
+**Deployment**: 01f0eb62d7db10698dcf168e93370911 (recommendations feature)
+**Git**: 15f4dbf (current deployment)
