@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     # Vector Search Index - UNIFIED INDEX (replaces 3 separate indexes)
     VS_INDEX: str = "main.fashion_sota.product_embeddings_index"
 
+    # SQL Warehouse for queries
+    SQL_WAREHOUSE_ID: str = "148ccb90800933a1"
+
     # Legacy indexes - REMOVED (no longer needed with unified index)
     # VS_IMAGE_INDEX: str = "main.fashion_demo.vs_image_search"  # DELETED
     # VS_TEXT_INDEX: str = "main.fashion_demo.vs_text_search"  # DELETED
