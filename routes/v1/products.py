@@ -289,17 +289,27 @@ async def get_complementary_products(
         from databricks.sdk import WorkspaceClient
         w = WorkspaceClient()
 
+        # Query outfit pairings - check BOTH directions since table is bidirectional
         query = f"""
         SELECT
-            recommended_product_id,
-            recommended_product_name,
-            recommended_category,
-            co_occurrence_count,
-            avg_lookbook_sim,
-            avg_product_sim
+            product_2_id as recommended_product_id,
+            product_2_name as recommended_product_name,
+            product_2_category as recommended_category,
+            co_occurrence_count
         FROM main.fashion_sota.outfit_recommendations_filtered
-        WHERE source_product_id = '{product_id_int}'
-        ORDER BY co_occurrence_count DESC, avg_lookbook_sim DESC
+        WHERE product_1_id = '{product_id_int}'
+
+        UNION ALL
+
+        SELECT
+            product_1_id as recommended_product_id,
+            product_1_name as recommended_product_name,
+            product_1_category as recommended_category,
+            co_occurrence_count
+        FROM main.fashion_sota.outfit_recommendations_filtered
+        WHERE product_2_id = '{product_id_int}'
+
+        ORDER BY co_occurrence_count DESC
         LIMIT {limit}
         """
 
