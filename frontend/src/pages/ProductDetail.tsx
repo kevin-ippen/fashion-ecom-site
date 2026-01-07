@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ShoppingCart, Heart, Star, Package, Truck, Shield } from 'lucide-react';
-import { productsApi } from '@/api/client';
+import { productsApi, searchApi } from '@/api/client';
 import { useCartStore } from '@/stores/cartStore';
 import { usePersonaStore } from '@/stores/personaStore';
 import { Button } from '@/components/ui/Button';
@@ -23,6 +23,19 @@ export function ProductDetail() {
     enabled: !!productId,
   });
 
+  // Fetch personalized recommendations (when persona selected)
+  const { data: personalizedRecsResponse } = useQuery({
+    queryKey: ['personalized-recs', productId, selectedPersona?.user_id],
+    queryFn: async () => {
+      if (selectedPersona) {
+        const response = await searchApi.getRecommendations(selectedPersona.user_id, 4);
+        return response.products.filter(p => p.product_id !== productId);
+      }
+      return [];
+    },
+    enabled: !!productId && !!selectedPersona,
+  });
+
   // Fetch similar products (visual similarity)
   const { data: similarProductsResponse } = useQuery({
     queryKey: ['similar-products', productId],
@@ -41,6 +54,7 @@ export function ProductDetail() {
     enabled: !!productId,
   });
 
+  const personalizedRecs = personalizedRecsResponse || [];
   const similarProducts = similarProductsResponse?.products || [];
   const completeTheLookProducts = completeTheLookResponse?.products || [];
 
@@ -220,6 +234,22 @@ export function ProductDetail() {
             </div>
           </div>
         </div>
+
+        {/* Personalized recommendations (when persona selected) */}
+        {selectedPersona && personalizedRecs && personalizedRecs.length > 0 && (
+          <div className="mt-16">
+            <h2 className="mb-6 text-2xl font-bold">
+              Personalized for {selectedPersona.name}
+            </h2>
+            <p className="mb-4 text-sm text-gray-600">
+              Products tailored to your style preferences and purchase history
+            </p>
+            <ProductGrid
+              products={personalizedRecs}
+              showPersonalization={true}
+            />
+          </div>
+        )}
 
         {/* Similar products - Visual similarity */}
         {similarProducts && similarProducts.length > 0 && (
