@@ -192,10 +192,11 @@ async def get_similar_products(
         LIMIT 1
         """
 
-        result = w.statement_execution.execute_statement(
+        execution_result = w.statement_execution.execute_statement(
             statement=query,
             warehouse_id=settings.SQL_WAREHOUSE_ID if hasattr(settings, 'SQL_WAREHOUSE_ID') else "148ccb90800933a1"
-        ).result()
+        )
+        result = execution_result.result
 
         if not result or not result.data_array or len(result.data_array) == 0:
             raise HTTPException(
@@ -302,10 +303,11 @@ async def get_complementary_products(
         LIMIT {limit}
         """
 
-        result = w.statement_execution.execute_statement(
+        execution_result = w.statement_execution.execute_statement(
             statement=query,
             warehouse_id=settings.SQL_WAREHOUSE_ID if hasattr(settings, 'SQL_WAREHOUSE_ID') else "148ccb90800933a1"
-        ).result()
+        )
+        result = execution_result.result
 
         if not result or not result.data_array or len(result.data_array) == 0:
             # Fallback: no outfit recommendations, return empty
