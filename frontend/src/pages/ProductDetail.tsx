@@ -1,11 +1,9 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ShoppingCart, Heart, Star, Package, Truck, Shield } from 'lucide-react';
-import { productsApi, searchApi } from '@/api/client';
+import { ArrowLeft, ShoppingCart, Heart, Package, Truck, Shield } from 'lucide-react';
+import { productsApi } from '@/api/client';
 import { useCartStore } from '@/stores/cartStore';
-import { usePersonaStore } from '@/stores/personaStore';
 import { Button } from '@/components/ui/Button';
-import { Card, CardContent } from '@/components/ui/Card';
 import { ProductGrid } from '@/components/product/ProductGrid';
 import { formatPrice } from '@/lib/utils';
 import { useState } from 'react';
@@ -14,26 +12,12 @@ export function ProductDetail() {
   const { productId } = useParams<{ productId: string }>();
   const [quantity, setQuantity] = useState(1);
   const addItem = useCartStore((state) => state.addItem);
-  const selectedPersona = usePersonaStore((state) => state.selectedPersona);
 
   // Fetch product details
   const { data: product, isLoading } = useQuery({
     queryKey: ['product', productId],
     queryFn: () => productsApi.getById(productId!),
     enabled: !!productId,
-  });
-
-  // Fetch personalized recommendations (when persona selected)
-  const { data: personalizedRecsResponse } = useQuery({
-    queryKey: ['personalized-recs', productId, selectedPersona?.user_id],
-    queryFn: async () => {
-      if (selectedPersona) {
-        const response = await searchApi.getRecommendations(selectedPersona.user_id, 4);
-        return response.products.filter(p => p.product_id !== productId);
-      }
-      return [];
-    },
-    enabled: !!productId && !!selectedPersona,
   });
 
   // Fetch similar products (visual similarity)
@@ -54,7 +38,6 @@ export function ProductDetail() {
     enabled: !!productId,
   });
 
-  const personalizedRecs = personalizedRecsResponse || [];
   const similarProducts = similarProductsResponse?.products || [];
   const completeTheLookProducts = completeTheLookResponse?.products || [];
 
@@ -132,26 +115,6 @@ export function ProductDetail() {
             <div className="flex items-baseline gap-4">
               <p className="text-4xl font-bold text-gray-900">{formatPrice(product.price)}</p>
             </div>
-
-            {/* Personalization badge */}
-            {selectedPersona && product.similarity_score && (
-              <Card className="border-blue-200 bg-blue-50">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Star className="h-5 w-5 fill-blue-600 text-blue-600" />
-                    <div>
-                      <p className="font-semibold text-blue-900">
-                        {Math.round((product.similarity_score || 0) * 100)}% match for{' '}
-                        {selectedPersona.name}
-                      </p>
-                      {product.personalization_reason && (
-                        <p className="text-sm text-blue-700">{product.personalization_reason}</p>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             {/* Product details */}
             <div className="space-y-3">
@@ -234,22 +197,6 @@ export function ProductDetail() {
             </div>
           </div>
         </div>
-
-        {/* Personalized recommendations (when persona selected) */}
-        {selectedPersona && personalizedRecs && personalizedRecs.length > 0 && (
-          <div className="mt-16">
-            <h2 className="mb-6 text-2xl font-bold">
-              Personalized for {selectedPersona.name}
-            </h2>
-            <p className="mb-4 text-sm text-gray-600">
-              Products tailored to your style preferences and purchase history
-            </p>
-            <ProductGrid
-              products={personalizedRecs}
-              showPersonalization={true}
-            />
-          </div>
-        )}
 
         {/* Similar products - Visual similarity */}
         {similarProducts && similarProducts.length > 0 && (
