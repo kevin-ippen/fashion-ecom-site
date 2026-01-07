@@ -167,7 +167,8 @@ class RecommendationsService:
 
             logger.info(f"Vector search returned {len(candidates)} candidates")
 
-            # Filter out source product and incompatible categories
+            # For visual similarity, only filter out the source product
+            # (Category compatibility filtering is only for outfit pairings, not visual similarity)
             filtered = []
             for candidate in candidates:
                 candidate_id = str(candidate.get("product_id"))
@@ -176,20 +177,9 @@ class RecommendationsService:
                 if candidate_id == source_id:
                     continue
 
-                # Check category compatibility
-                target_category = candidate.get("master_category")
-                target_subcategory = candidate.get("sub_category")
-
-                if not self.is_compatible(
-                    source_category, source_subcategory,
-                    target_category, target_subcategory
-                ):
-                    logger.debug(f"Filtered out {candidate_id}: incompatible categories")
-                    continue
-
                 filtered.append(candidate)
 
-            logger.info(f"After category filtering: {len(filtered)} products")
+            logger.info(f"After filtering source product: {len(filtered)} products")
 
             # Diversify by color (best effort)
             diversified = self.diversify_by_color(filtered, target_count=limit, min_colors=2)
