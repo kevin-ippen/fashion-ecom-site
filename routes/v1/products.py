@@ -289,6 +289,10 @@ async def get_complementary_products(
         from databricks.sdk import WorkspaceClient
         w = WorkspaceClient()
 
+        # Query for more candidates than needed (will filter for compatibility)
+        candidate_multiplier = 5
+        search_limit = limit * candidate_multiplier
+
         # Query outfit pairings - check BOTH directions since table is bidirectional
         query = f"""
         SELECT
@@ -310,7 +314,7 @@ async def get_complementary_products(
         WHERE product_2_id = '{product_id_int}'
 
         ORDER BY co_occurrence_count DESC
-        LIMIT {limit}
+        LIMIT {search_limit}
         """
 
         execution_result = w.statement_execution.execute_statement(
@@ -330,8 +334,10 @@ async def get_complementary_products(
                 has_more=False
             )
 
-        # Get full product details from Lakebase for each recommendation
-        products = []
+        # Get full product details from Lakebase for each candidate
+        candidates = []
+        co_occurrence_map = {}  # Track co-occurrence counts
+
         for row in result.data_array:
             rec_product_id = row[0]
             co_occurrence = row[3]
@@ -341,16 +347,36 @@ async def get_complementary_products(
                 full_product = await repo.get_product_by_id(rec_product_id_int)
 
                 if full_product:
-                    product = ProductDetail(**full_product)
-                    product.image_url = get_image_url(product.product_id)
-                    # Add personalization reason
-                    product.personalization_reason = f"Paired together in {co_occurrence} outfits"
-                    products.append(product)
+                    candidates.append(full_product)
+                    co_occurrence_map[rec_product_id_int] = co_occurrence
             except Exception as e:
                 logger.warning(f"Failed to get product {rec_product_id}: {e}")
                 continue
 
-        logger.info(f"✅ Returning {len(products)} complementary products from outfit pairings")
+        logger.info(f"Retrieved {len(candidates)} candidate products")
+
+        # Apply outfit compatibility filtering
+        from services.outfit_compatibility_service import outfit_compatibility_service
+
+        filtered = outfit_compatibility_service.filter_outfit_recommendations(
+            source_product=source_product,
+            candidates=candidates,
+            limit=limit
+        )
+
+        # Convert to ProductDetail models and add metadata
+        products = []
+        for product_dict in filtered:
+            product = ProductDetail(**product_dict)
+            product.image_url = get_image_url(product.product_id)
+
+            # Add personalization reason with co-occurrence count
+            co_occurrence = co_occurrence_map.get(product.product_id, 1)
+            product.personalization_reason = f"Paired together in {co_occurrence} outfits"
+
+            products.append(product)
+
+        logger.info(f"✅ Returning {len(products)} compatible outfit recommendations")
 
         return ProductListResponse(
             products=products,
