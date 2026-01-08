@@ -26,6 +26,26 @@ class LakebaseRepository:
         self.users_table = f"{self.schema}.{settings.LAKEBASE_USERS_TABLE}"  # fashion_sota.users
         self.user_features_table = f"{self.schema}.{settings.LAKEBASE_USER_FEATURES_TABLE}"  # fashion_sota.user_preferences
 
+    def _get_base_product_filter(self) -> str:
+        """
+        Get base WHERE clause to filter out unwanted product categories from frontend
+
+        Excludes:
+        - Innerwear (underwear, bras, intimates)
+        - Loungewear and Nightwear (sleepwear, pajamas)
+        - Swimwear
+        - Saris/Sarees
+
+        Only includes:
+        - Apparel, Accessories, Footwear
+        """
+        return """
+            master_category IN ('Apparel', 'Accessories', 'Footwear')
+            AND sub_category NOT IN ('Innerwear', 'Loungewear and Nightwear')
+            AND article_type != 'Swimwear'
+            AND article_type != 'Saree'
+        """
+
     async def _execute_query(self, query: str, params: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """Execute a SQL query and return results as list of dicts"""
         try:
@@ -48,7 +68,7 @@ class LakebaseRepository:
         sort_order: str = "ASC"
     ) -> List[Dict[str, Any]]:
         """Get products with optional filtering and pagination"""
-        where_clauses = []
+        where_clauses = [f"({self._get_base_product_filter()})"]  # Always apply base filter
         params = {}
 
         if filters:
@@ -80,7 +100,7 @@ class LakebaseRepository:
                 where_clauses.append("price <= :max_price")
                 params["max_price"] = filters["max_price"]
 
-        where_clause = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+        where_clause = f"WHERE {' AND '.join(where_clauses)}"
 
         # Add limit and offset to params
         params["limit"] = limit
@@ -98,7 +118,7 @@ class LakebaseRepository:
 
     async def get_product_count(self, filters: Optional[Dict[str, Any]] = None) -> int:
         """Get total count of products matching filters"""
-        where_clauses = []
+        where_clauses = [f"({self._get_base_product_filter()})"]  # Always apply base filter
         params = {}
 
         if filters:
@@ -126,7 +146,7 @@ class LakebaseRepository:
                 where_clauses.append("price <= :max_price")
                 params["max_price"] = filters["max_price"]
 
-        where_clause = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+        where_clause = f"WHERE {' AND '.join(where_clauses)}"
 
         query = f"""
             SELECT COUNT(*) as count
@@ -143,6 +163,7 @@ class LakebaseRepository:
             SELECT *
             FROM {self.products_table}
             WHERE product_id = :product_id
+                AND ({self._get_base_product_filter()})
         """
         results = await self._execute_query(query, {"product_id": product_id})
         return results[0] if results else None
@@ -205,6 +226,7 @@ class LakebaseRepository:
                 MIN(price) as min_price,
                 MAX(price) as max_price
             FROM {self.products_table}
+            WHERE ({self._get_base_product_filter()})
         """
         results = await self._execute_query(query)
         if results:
@@ -225,7 +247,7 @@ class LakebaseRepository:
 
     async def search_products_by_text(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
         """Search products by text query with NULL handling"""
-        
+
         # Log the search query for debugging
         logger.info(f"Text search: '{query}' in {self.products_table}")
 
@@ -233,17 +255,20 @@ class LakebaseRepository:
             SELECT *
             FROM {self.products_table}
             WHERE
-                (product_display_name IS NOT NULL AND LOWER(product_display_name) ILIKE :query)
-                OR (article_type IS NOT NULL AND LOWER(article_type) ILIKE :query)
-                OR (sub_category IS NOT NULL AND LOWER(sub_category) ILIKE :query)
-                OR (master_category IS NOT NULL AND LOWER(master_category) ILIKE :query)
-                OR (usage IS NOT NULL AND LOWER(usage) ILIKE :query)
+                ({self._get_base_product_filter()})
+                AND (
+                    (product_display_name IS NOT NULL AND LOWER(product_display_name) ILIKE :query)
+                    OR (article_type IS NOT NULL AND LOWER(article_type) ILIKE :query)
+                    OR (sub_category IS NOT NULL AND LOWER(sub_category) ILIKE :query)
+                    OR (master_category IS NOT NULL AND LOWER(master_category) ILIKE :query)
+                    OR (usage IS NOT NULL AND LOWER(usage) ILIKE :query)
+                )
             LIMIT :limit
         """
-        
+
         results = await self._execute_query(sql_query, {"query": f"%{query.lower()}%", "limit": limit})
-        
+
         # Log results count for debugging
         logger.info(f"Text search returned {len(results)} results")
-        
+
         return results
