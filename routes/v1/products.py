@@ -293,14 +293,17 @@ async def get_complementary_products(
         candidate_multiplier = 5
         search_limit = limit * candidate_multiplier
 
-        # Query outfit pairings - check BOTH directions since table is bidirectional
+        # Query outfit pairings from unified view (3 tiers: curated + algorithmic + rule-based)
+        # Prioritizes by quality_score, then co_occurrence_count
         query = f"""
         SELECT
             product_2_id as recommended_product_id,
             product_2_name as recommended_product_name,
             product_2_category as recommended_category,
-            co_occurrence_count
-        FROM main.fashion_sota.outfit_recommendations_filtered
+            co_occurrence_count,
+            quality_score,
+            source
+        FROM main.fashion_sota.outfit_recommendations_unified
         WHERE product_1_id = '{product_id_int}'
 
         UNION ALL
@@ -309,11 +312,13 @@ async def get_complementary_products(
             product_1_id as recommended_product_id,
             product_1_name as recommended_product_name,
             product_1_category as recommended_category,
-            co_occurrence_count
-        FROM main.fashion_sota.outfit_recommendations_filtered
+            co_occurrence_count,
+            quality_score,
+            source
+        FROM main.fashion_sota.outfit_recommendations_unified
         WHERE product_2_id = '{product_id_int}'
 
-        ORDER BY co_occurrence_count DESC
+        ORDER BY quality_score DESC, co_occurrence_count DESC
         LIMIT {search_limit}
         """
 
