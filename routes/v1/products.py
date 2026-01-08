@@ -289,21 +289,21 @@ async def get_complementary_products(
         from databricks.sdk import WorkspaceClient
         w = WorkspaceClient()
 
-        # Query for more candidates than needed (will filter for compatibility)
-        candidate_multiplier = 5
-        search_limit = limit * candidate_multiplier
+        # Query for top quality matches (will filter and randomize)
+        # Fetch 10-12 top quality recommendations, then filter and randomly select 4
+        search_limit = max(10, limit * 2)
 
-        # Query outfit pairings from unified view (3 tiers: curated + algorithmic + rule-based)
-        # Prioritizes by quality_score, then co_occurrence_count
+        # Query outfit pairings - simplified without CTE (for better compatibility)
+        # Just query lookbook table directly (the largest source with 9.4M pairs)
         query = f"""
         SELECT
             product_2_id as recommended_product_id,
             product_2_name as recommended_product_name,
             product_2_category as recommended_category,
             co_occurrence_count,
-            quality_score,
+            0.8 as quality_score,
             source
-        FROM main.fashion_sota.outfit_recommendations_unified
+        FROM main.fashion_sota.outfit_recommendations_from_lookbook
         WHERE product_1_id = '{product_id_int}'
 
         UNION ALL
@@ -313,20 +313,28 @@ async def get_complementary_products(
             product_1_name as recommended_product_name,
             product_1_category as recommended_category,
             co_occurrence_count,
-            quality_score,
+            0.8 as quality_score,
             source
-        FROM main.fashion_sota.outfit_recommendations_unified
+        FROM main.fashion_sota.outfit_recommendations_from_lookbook
         WHERE product_2_id = '{product_id_int}'
 
-        ORDER BY quality_score DESC, co_occurrence_count DESC
+        ORDER BY co_occurrence_count DESC
         LIMIT {search_limit}
         """
 
+        warehouse_id = settings.SQL_WAREHOUSE_ID if hasattr(settings, 'SQL_WAREHOUSE_ID') else "148ccb90800933a1"
+        logger.info(f"Executing query with warehouse: {warehouse_id}, product_id_int: {product_id_int}")
+        logger.info(f"Full query: {query}")
+
         execution_result = w.statement_execution.execute_statement(
             statement=query,
-            warehouse_id=settings.SQL_WAREHOUSE_ID if hasattr(settings, 'SQL_WAREHOUSE_ID') else "148ccb90800933a1"
+            warehouse_id=warehouse_id
         )
         result = execution_result.result
+
+        logger.info(f"Query executed. Result type: {type(result)}, has data_array: {hasattr(result, 'data_array') if result else False}")
+        if result and hasattr(result, 'data_array'):
+            logger.info(f"Data array length: {len(result.data_array) if result.data_array else 0}")
 
         if not result or not result.data_array or len(result.data_array) == 0:
             # Fallback: no outfit recommendations, return empty
@@ -360,14 +368,24 @@ async def get_complementary_products(
 
         logger.info(f"Retrieved {len(candidates)} candidate products")
 
-        # Apply outfit compatibility filtering
+        # Apply outfit compatibility filtering (gets more than we need)
         from services.outfit_compatibility_service import outfit_compatibility_service
+        import random
+
+        # Request more than limit for randomization
+        filter_limit = limit * 2  # Get 8 filtered candidates for 4 final selections
 
         filtered = outfit_compatibility_service.filter_outfit_recommendations(
             source_product=source_product,
             candidates=candidates,
-            limit=limit
+            limit=filter_limit
         )
+
+        # Randomly select 'limit' items from filtered results for variety
+        if len(filtered) > limit:
+            filtered = random.sample(filtered, limit)
+
+        logger.info(f"After filtering and randomization: {len(filtered)} products")
 
         # Convert to ProductDetail models and add metadata
         products = []

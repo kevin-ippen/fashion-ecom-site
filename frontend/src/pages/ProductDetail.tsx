@@ -24,7 +24,7 @@ export function ProductDetail() {
   const { data: similarProductsResponse } = useQuery({
     queryKey: ['similar-products', productId],
     queryFn: async () => {
-      return await productsApi.getSimilar(productId!, 6);
+      return await productsApi.getSimilar(productId!, 4);
     },
     enabled: !!productId,
   });
