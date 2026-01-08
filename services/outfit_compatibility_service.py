@@ -468,6 +468,65 @@ class OutfitCompatibilityService:
         logger.debug(f"Category diversity: {dict(category_counts)}")
         return result
 
+    def is_category_compatible_relaxed(
+        self,
+        source_product: Dict[str, Any],
+        rec_product: Dict[str, Any],
+        check_style: bool = True
+    ) -> bool:
+        """
+        Relaxed version of category compatibility (optionally skip style checking)
+
+        Args:
+            source_product: Source product dict
+            rec_product: Recommended product dict
+            check_style: If False, skip style coherence checking (allow athletic with casual, etc.)
+
+        Returns:
+            True if compatible, False otherwise
+        """
+        # Categorize both products
+        source_cat = self.categorize_product(source_product)
+        rec_cat = self.categorize_product(rec_product)
+
+        # NEVER MATCH: Isolated categories (always enforce)
+        if source_cat in {"innerwear", "sleepwear", "swimwear"}:
+            return False
+        if rec_cat in {"innerwear", "sleepwear", "swimwear"}:
+            return False
+
+        # NEVER MATCH: Same category duplicates (always enforce, except outerwear layering)
+        if source_cat == rec_cat:
+            if source_cat == "outerwear":
+                source_article = source_product.get("article_type", "")
+                rec_article = rec_product.get("article_type", "")
+                if source_article != rec_article:
+                    light_outer = {"Cardigans", "Shrug"}
+                    if source_article in light_outer or rec_article in light_outer:
+                        return True
+            return False
+
+        # NEVER MATCH: Dress with tops/bottoms (always enforce)
+        if source_cat == "dress" and rec_cat in {"tops", "bottoms"}:
+            return False
+        if rec_cat == "dress" and source_cat in {"tops", "bottoms"}:
+            return False
+
+        # OPTIONAL: Style compatibility (can be relaxed)
+        if check_style:
+            source_style = self.get_style_category(source_product)
+            rec_style = self.get_style_category(rec_product)
+            if not self.is_style_compatible(source_style, rec_style):
+                return False
+
+        # ALWAYS MATCH: Check against compatible pairs
+        pair = self.normalize_pair(source_cat, rec_cat)
+        if pair in self.COMPATIBLE_PAIRS:
+            return True
+
+        # Default: allow if not explicitly blocked
+        return True
+
     def filter_outfit_recommendations(
         self,
         source_product: Dict[str, Any],
@@ -475,7 +534,8 @@ class OutfitCompatibilityService:
         limit: int = 4
     ) -> List[Dict[str, Any]]:
         """
-        Filter and diversify outfit recommendations using deterministic rules
+        Filter and diversify outfit recommendations using strict deterministic rules
+        (relies on large candidate pool including lower quality matches)
 
         Args:
             source_product: Source product dict
@@ -491,16 +551,16 @@ class OutfitCompatibilityService:
 
         logger.info(f"Filtering {len(candidates)} candidates for {source_category} ({source_style}, {source_color})")
 
-        # Step 1: Filter by category and style compatibility using deterministic rules
+        # Step 1: Filter by strict category and style compatibility rules
         compatible = []
         for candidate in candidates:
             if self.is_category_compatible(source_product, candidate):
                 compatible.append(candidate)
 
-        logger.info(f"After compatibility filtering: {len(compatible)} products")
+        logger.info(f"After strict compatibility filtering: {len(compatible)} products")
 
         if len(compatible) == 0:
-            logger.warning("No compatible products found after filtering!")
+            logger.warning("No compatible products found after strict filtering!")
             return []
 
         # Step 2: Filter by color compatibility

@@ -289,9 +289,9 @@ async def get_complementary_products(
         from databricks.sdk import WorkspaceClient
         w = WorkspaceClient()
 
-        # Query for top quality matches (will filter and randomize)
-        # Fetch 10-12 top quality recommendations, then filter and randomly select 4
-        search_limit = max(10, limit * 2)
+        # Query for outfit pairs - include lower quality matches since filtering is strict
+        # Fetch 100+ candidates to ensure we have enough after deterministic filtering
+        search_limit = max(100, limit * 20)
 
         # Query outfit pairings - simplified without CTE (for better compatibility)
         # Just query lookbook table directly (the largest source with 9.4M pairs)
