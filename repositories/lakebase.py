@@ -99,6 +99,18 @@ class LakebaseRepository:
                 where_clauses.append("price <= :max_price")
                 params["max_price"] = filters["max_price"]
 
+            # Keyword filtering with OR logic (matches sub_category, article_type, or product name)
+            if filters.get("keywords"):
+                keywords = filters["keywords"]
+                keyword_conditions = []
+                for i, keyword in enumerate(keywords):
+                    param_name = f"keyword_{i}"
+                    keyword_conditions.append(
+                        f"(sub_category ILIKE :{param_name} OR article_type ILIKE :{param_name} OR product_display_name ILIKE :{param_name})"
+                    )
+                    params[param_name] = f"%{keyword}%"
+                where_clauses.append(f"({' OR '.join(keyword_conditions)})")
+
         where_clause = f"WHERE {' AND '.join(where_clauses)}"
 
         # Add limit and offset to params
@@ -144,6 +156,18 @@ class LakebaseRepository:
             if filters.get("max_price"):
                 where_clauses.append("price <= :max_price")
                 params["max_price"] = filters["max_price"]
+
+            # Keyword filtering with OR logic (same as get_products)
+            if filters.get("keywords"):
+                keywords = filters["keywords"]
+                keyword_conditions = []
+                for i, keyword in enumerate(keywords):
+                    param_name = f"keyword_{i}"
+                    keyword_conditions.append(
+                        f"(sub_category ILIKE :{param_name} OR article_type ILIKE :{param_name} OR product_display_name ILIKE :{param_name})"
+                    )
+                    params[param_name] = f"%{keyword}%"
+                where_clauses.append(f"({' OR '.join(keyword_conditions)})")
 
         where_clause = f"WHERE {' AND '.join(where_clauses)}"
 

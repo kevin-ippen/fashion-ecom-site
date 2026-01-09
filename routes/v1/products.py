@@ -113,53 +113,57 @@ async def list_products(
                 preferred_cats = user.get("preferred_categories", [])
                 logger.info(f"User preferred categories (for reference): {preferred_cats}")
 
-                # Determine sort strategy and filters based on persona
+                # Determine sort strategy, filters, and keywords based on persona
                 if persona_style == "luxury":
-                    # Luxury: Show expensive items from all categories
+                    # Luxury: Premium, designer, high-end items
+                    filters["keywords"] = ["premium", "designer", "leather", "silk", "cashmere", "luxury", "suede", "velvet", "satin", "gold"]
                     sort_by = "price"
                     sort_order = "DESC"
-                    logger.info("Luxury persona → sorting by price DESC")
+                    logger.info("Luxury persona → premium keywords, sorting by price DESC")
                 elif persona_style == "budget":
-                    # Budget: Show affordable items from all categories
+                    # Budget: Basic, affordable, value items
+                    filters["keywords"] = ["cotton", "basic", "casual", "jersey", "denim", "tee", "tank", "shorts", "leggings", "socks"]
                     sort_by = "price"
                     sort_order = "ASC"
-                    logger.info("Budget persona → sorting by price ASC")
+                    logger.info("Budget persona → value keywords, sorting by price ASC")
                 elif persona_style == "trendy":
-                    # Trendy: Show newest products (highest IDs)
+                    # Trendy: Modern, fashion-forward, stylish items
+                    filters["keywords"] = ["crop", "oversized", "graphic", "printed", "pattern", "colorblock", "metallic", "mesh", "cutout", "asymmetric"]
                     sort_by = "product_id"
                     sort_order = "DESC"
-                    logger.info("Trendy persona → sorting by product_id DESC (newest)")
+                    logger.info("Trendy persona → fashion keywords, sorting by product_id DESC (newest)")
                 elif persona_style == "vintage":
-                    # Vintage: Show classic/older products (lowest IDs)
+                    # Vintage: Classic, retro, timeless items
+                    filters["keywords"] = ["classic", "retro", "vintage", "denim", "flannel", "wool", "tweed", "corduroy", "plaid", "striped"]
                     sort_by = "product_id"
                     sort_order = "ASC"
-                    logger.info("Vintage persona → sorting by product_id ASC (oldest)")
+                    logger.info("Vintage persona → classic keywords, sorting by product_id ASC (oldest)")
                 elif persona_style == "athletic":
-                    # Athletic: Focus on Apparel category, varied order
-                    if not master_category and not sub_category:
-                        filters["master_category"] = "Apparel"
+                    # Athletic: Sport, active, performance items
+                    filters["keywords"] = ["sports", "track", "running", "training", "gym", "active", "performance", "athletic", "yoga", "joggers"]
                     sort_by = "product_id"
                     sort_order = "ASC"
-                    logger.info("Athletic persona → filtering Apparel, varied order")
+                    logger.info("Athletic persona → sports keywords, varied order")
                 elif persona_style == "formal":
-                    # Formal: Focus on Apparel category, premium items
-                    if not master_category:
-                        filters["master_category"] = "Apparel"
+                    # Formal: Business, professional, elegant items
+                    filters["keywords"] = ["formal", "shirt", "blazer", "suit", "dress", "trousers", "oxford", "collar", "button", "elegant"]
                     sort_by = "price"
                     sort_order = "DESC"
-                    logger.info("Formal persona → filtering Apparel, sorting by price DESC")
+                    logger.info("Formal persona → business keywords, sorting by price DESC")
                 elif persona_style == "casual":
-                    # Casual: Comfortable items, varied order
+                    # Casual: Comfortable, everyday, relaxed items
+                    filters["keywords"] = ["tee", "jeans", "hoodie", "sweater", "sneakers", "casual", "comfort", "everyday", "relaxed", "sweatshirt"]
                     sort_by = "product_id"
                     sort_order = "ASC"
-                    logger.info("Casual persona → varied order")
+                    logger.info("Casual persona → comfort keywords, varied order")
                 elif persona_style == "minimalist":
-                    # Minimalist: Simple items, varied order
+                    # Minimalist: Simple, clean, essential items
+                    filters["keywords"] = ["solid", "plain", "basic", "essential", "simple", "neutral", "black", "white", "grey", "beige"]
                     sort_by = "product_id"
-                    sort_order = "DESC"  # Reverse for variety from casual
-                    logger.info("Minimalist persona → varied order (reverse)")
+                    sort_order = "DESC"
+                    logger.info("Minimalist persona → simple keywords, varied order (reverse)")
                 else:
-                    # Default: varied order
+                    # Default: varied order, no keywords
                     sort_by = "product_id"
                     sort_order = "ASC"
                     logger.info(f"Unknown persona '{persona_style}' → default varied order")
