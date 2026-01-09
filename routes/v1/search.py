@@ -186,6 +186,14 @@ async def get_recommendations(
     try:
         # Get taste_embedding from fashion_sota.users (BATCH PRE-CALCULATED)
         logger.info(f"🔍 Looking for pre-calculated taste_embedding for user {user_id} in fashion_sota.users...")
+        logger.info(f"   User record keys: {list(user.keys())}")
+        logger.info(f"   Has taste_embedding key: {'taste_embedding' in user}")
+        if 'taste_embedding' in user:
+            te_value = user.get('taste_embedding')
+            logger.info(f"   taste_embedding type: {type(te_value)}")
+            logger.info(f"   taste_embedding is None: {te_value is None}")
+            if te_value:
+                logger.info(f"   taste_embedding length: {len(te_value) if hasattr(te_value, '__len__') else 'N/A'}")
 
         # Check if user has taste_embedding (already fetched above)
         if user.get("taste_embedding"):
