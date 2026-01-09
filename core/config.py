@@ -45,9 +45,7 @@ class Settings(BaseSettings):
     # Lakebase table names (PostgreSQL schema.table format)
     LAKEBASE_SCHEMA: str = "fashion_sota"
     LAKEBASE_PRODUCTS_TABLE: str = "products_lakebase"
-    # TEMP: Using fashion_demo users until migrated to fashion_sota
-    LAKEBASE_USERS_TABLE: str = "usersdb"  # Temporary: fashion_demo.usersdb
-    LAKEBASE_USER_FEATURES_TABLE: str = "user_style_featuresdb"  # Temporary: fashion_demo.user_style_featuresdb
+    LAKEBASE_USERS_TABLE: str = "users"  # fashion_sota.users (has taste_embedding column)
 
     # Databricks Workspace
     @property
