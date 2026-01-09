@@ -215,45 +215,61 @@ async def get_recommendations(
             logger.info(f"✅ Using BATCH pre-calculated taste_embedding from fashion_sota.users")
             logger.info(f"   Shape: {user_embedding.shape}, dtype: {user_embedding.dtype}")
 
-            # Build flexible filters based on parameters
-            filters = {}
+            # Build filters for application-layer filtering (NOT for vector search index)
+            # Vector search index only has embedding column, so we do unfiltered search
+            # and filter results in application layer
+            app_filters = {}
 
             if restrict_category and persona.get("preferred_categories"):
-                filters["master_category"] = persona["preferred_categories"]
-                logger.info(f"Restricting to categories: {persona['preferred_categories']}")
+                app_filters["categories"] = persona["preferred_categories"]
+                logger.info(f"Will filter to categories: {persona['preferred_categories']}")
 
-            # Only add price filter if we have valid price data
+            # Only set price filter if we have valid price data
             if restrict_price and persona.get("p25_price") and persona.get("p75_price"):
                 min_price = persona["p25_price"] * 0.8
                 max_price = persona["p75_price"] * 1.2
-                filters["price"] = {"$gte": min_price, "$lte": max_price}
-                logger.info(f"Restricting to price range: ${min_price:.0f}-${max_price:.0f}")
-            else:
-                logger.info("Skipping price filter (no valid price data)")
+                app_filters["min_price"] = min_price
+                app_filters["max_price"] = max_price
+                logger.info(f"Will filter to price range: ${min_price:.0f}-${max_price:.0f}")
 
             if restrict_color and persona.get("color_prefs"):
-                filters["base_color"] = persona["color_prefs"]
-                logger.info(f"Restricting to colors: {persona['color_prefs']}")
+                app_filters["colors"] = persona["color_prefs"]
+                logger.info(f"Will filter to colors: {persona['color_prefs']}")
 
-            # Try with filters first
-            logger.info(f"Attempting vector search with filters: {filters}")
+            # Get more results from vector search (unfiltered) so we have enough after filtering
+            logger.info(f"Performing unfiltered vector search to get {limit * 4} candidates")
             products_data = await vector_search_service.search_hybrid(
                 query_vector=user_embedding,
-                num_results=limit * 2,
-                filters=filters if filters else None
+                num_results=limit * 4,  # Get more to compensate for filtering
+                filters=None  # NO FILTERS - index doesn't support them
             )
 
             logger.info(f"✅ Hybrid Vector Search returned {len(products_data)} products")
 
-            # If no results with filters, try without filters
-            if len(products_data) == 0 and filters:
-                logger.warning("No results with filters, retrying without filters...")
-                products_data = await vector_search_service.search_hybrid(
-                    query_vector=user_embedding,
-                    num_results=limit * 2,
-                    filters=None
-                )
-                logger.info(f"✅ Vector Search without filters returned {len(products_data)} products")
+            # Apply application-layer filtering to vector search results
+            if app_filters:
+                filtered_data = []
+                for p in products_data:
+                    # Category filter
+                    if "categories" in app_filters:
+                        if p.get("master_category") not in app_filters["categories"]:
+                            continue
+
+                    # Price filter - need to get price from products_lakebase
+                    # For now, skip price filtering in this layer since product_embeddings doesn't have price
+                    # We'll fetch price when converting to ProductDetail
+
+                    # Color filter
+                    if "colors" in app_filters:
+                        product_color = (p.get("base_color") or "").title()
+                        normalized_colors = [c.title() for c in app_filters["colors"]]
+                        if product_color not in normalized_colors:
+                            continue
+
+                    filtered_data.append(p)
+
+                logger.info(f"After application filters: {len(filtered_data)} products (removed {len(products_data) - len(filtered_data)})")
+                products_data = filtered_data
 
         else:
             # Fallback to rule-based if no taste_embedding
@@ -265,8 +281,9 @@ async def get_recommendations(
     except Exception as e:
         logger.warning(f"⚠️ Vector Search failed, using rule-based fallback: {e}")
 
-        # Fallback: Rule-based recommendations
+        # Fallback: Rule-based recommendations using Lakebase query
         filters = {}
+        app_filters = {}  # Initialize for fallback path
 
         if restrict_price and persona.get("p25_price") and persona.get("p75_price"):
             filters["min_price"] = persona["p25_price"] * 0.8

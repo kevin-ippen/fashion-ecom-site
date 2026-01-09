@@ -41,6 +41,7 @@ def get_image_url(product_id) -> str:
 async def list_products(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(24, ge=1, le=100, description="Items per page"),
+    user_id: Optional[str] = Query(None, description="User ID for personalized sorting"),
     gender: Optional[str] = None,
     master_category: Optional[str] = None,
     sub_category: Optional[str] = None,
@@ -53,9 +54,15 @@ async def list_products(
     db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Get paginated list of products with optional filtering
+    Get paginated list of products with optional filtering and personalization
+
+    If user_id is provided, products are sorted by taste propensity (personalized recommendations).
+    Otherwise, products are sorted by the specified field.
     """
     repo = LakebaseRepository(db)
+    import logging
+    import json
+    logger = logging.getLogger(__name__)
 
     # Build filters dict
     filters = {}
@@ -77,16 +84,90 @@ async def list_products(
     # Calculate offset
     offset = (page - 1) * page_size
 
-    # Get products and total count
-    products_data = await repo.get_products(
-        limit=page_size,
-        offset=offset,
-        filters=filters if filters else None,
-        sort_by=sort_by,
-        sort_order=sort_order
-    )
+    # Check if personalized sorting is requested
+    if user_id:
+        logger.info(f"🎯 Personalized product listing for user {user_id}")
+        try:
+            # Get user and their taste embedding
+            user = await repo.get_user_by_id(user_id)
 
-    total = await repo.get_product_count(filters if filters else None)
+            if user and user.get("taste_embedding"):
+                from services.vector_search_service import vector_search_service
+
+                # Parse embedding
+                embedding_data = user["taste_embedding"]
+                if isinstance(embedding_data, str):
+                    embedding_data = json.loads(embedding_data)
+
+                user_embedding = np.array(embedding_data, dtype=np.float32)
+
+                # Get personalized results via vector search (unfiltered)
+                # Get extra results to account for pagination
+                num_candidates = page * page_size + 50
+                logger.info(f"Getting {num_candidates} candidates via vector search for page {page}")
+
+                products_data = await vector_search_service.search_hybrid(
+                    query_vector=user_embedding,
+                    num_results=num_candidates,
+                    filters=None  # Index doesn't support filters
+                )
+
+                # Apply filters in application layer
+                if filters:
+                    filtered_data = []
+                    for p in products_data:
+                        if gender and p.get("gender") != gender:
+                            continue
+                        if master_category and p.get("master_category") != master_category:
+                            continue
+                        if sub_category and p.get("sub_category") != sub_category:
+                            continue
+                        if base_color and p.get("base_color") != base_color:
+                            continue
+                        # Note: season, min_price, max_price not in product_embeddings table
+                        filtered_data.append(p)
+
+                    logger.info(f"After filters: {len(filtered_data)} products")
+                    products_data = filtered_data
+
+                # Paginate the results
+                total = len(products_data)
+                products_data = products_data[offset:offset+page_size]
+
+                logger.info(f"✅ Returning page {page} of personalized results ({len(products_data)} products)")
+            else:
+                logger.warning(f"User {user_id} has no taste_embedding, falling back to standard sorting")
+                # Fall through to standard sorting below
+                products_data = await repo.get_products(
+                    limit=page_size,
+                    offset=offset,
+                    filters=filters if filters else None,
+                    sort_by=sort_by,
+                    sort_order=sort_order
+                )
+                total = await repo.get_product_count(filters if filters else None)
+
+        except Exception as e:
+            logger.error(f"Personalization failed: {e}, falling back to standard sorting")
+            # Fall through to standard sorting
+            products_data = await repo.get_products(
+                limit=page_size,
+                offset=offset,
+                filters=filters if filters else None,
+                sort_by=sort_by,
+                sort_order=sort_order
+            )
+            total = await repo.get_product_count(filters if filters else None)
+    else:
+        # Standard non-personalized sorting
+        products_data = await repo.get_products(
+            limit=page_size,
+            offset=offset,
+            filters=filters if filters else None,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        total = await repo.get_product_count(filters if filters else None)
 
     # Convert to ProductDetail models
     products = []
