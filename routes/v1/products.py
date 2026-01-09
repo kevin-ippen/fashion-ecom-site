@@ -135,12 +135,12 @@ async def list_products(
                     sort_order = "ASC"
                     logger.info("Vintage persona → sorting by product_id ASC (oldest)")
                 elif persona_style == "athletic":
-                    # Athletic: Focus on Apparel category
+                    # Athletic: Focus on Apparel category, varied order
                     if not master_category and not sub_category:
                         filters["master_category"] = "Apparel"
-                    sort_by = "product_display_name"
+                    sort_by = "product_id"
                     sort_order = "ASC"
-                    logger.info("Athletic persona → filtering Apparel, sorting by name")
+                    logger.info("Athletic persona → filtering Apparel, varied order")
                 elif persona_style == "formal":
                     # Formal: Focus on Apparel category, premium items
                     if not master_category:
@@ -149,20 +149,20 @@ async def list_products(
                     sort_order = "DESC"
                     logger.info("Formal persona → filtering Apparel, sorting by price DESC")
                 elif persona_style == "casual":
-                    # Casual: Comfortable items from all categories
-                    sort_by = "product_display_name"
+                    # Casual: Comfortable items, varied order
+                    sort_by = "product_id"
                     sort_order = "ASC"
-                    logger.info("Casual persona → sorting by name")
+                    logger.info("Casual persona → varied order")
                 elif persona_style == "minimalist":
-                    # Minimalist: Simple items from all categories
-                    sort_by = "product_display_name"
-                    sort_order = "ASC"
-                    logger.info("Minimalist persona → sorting by name")
+                    # Minimalist: Simple items, varied order
+                    sort_by = "product_id"
+                    sort_order = "DESC"  # Reverse for variety from casual
+                    logger.info("Minimalist persona → varied order (reverse)")
                 else:
-                    # Default: sort by name
-                    sort_by = "product_display_name"
+                    # Default: varied order
+                    sort_by = "product_id"
                     sort_order = "ASC"
-                    logger.info(f"Unknown persona '{persona_style}' → default sorting by name")
+                    logger.info(f"Unknown persona '{persona_style}' → default varied order")
 
                 # Get products with deterministic sorting
                 products_data = await repo.get_products(

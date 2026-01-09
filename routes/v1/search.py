@@ -246,11 +246,11 @@ async def get_recommendations(
             sort_order = "ASC"
             logger.info("Vintage persona → classic recommendations first")
         elif persona_style == "athletic":
-            # Athletic: Focus on Apparel
+            # Athletic: Focus on Apparel, varied order
             filters["master_category"] = "Apparel"
-            sort_by = "product_display_name"
+            sort_by = "product_id"
             sort_order = "ASC"
-            logger.info("Athletic persona → Apparel recommendations")
+            logger.info("Athletic persona → Apparel recommendations, varied order")
         elif persona_style == "formal":
             # Formal: Focus on Apparel, premium items
             filters["master_category"] = "Apparel"
@@ -258,17 +258,20 @@ async def get_recommendations(
             sort_order = "DESC"
             logger.info("Formal persona → premium Apparel recommendations")
         elif persona_style == "casual":
-            # Casual: Comfortable items, all categories
-            sort_by = "product_display_name"
+            # Casual: Comfortable items, varied order
+            sort_by = "product_id"
             sort_order = "ASC"
-            logger.info("Casual persona → alphabetical recommendations")
+            logger.info("Casual persona → varied order recommendations")
         elif persona_style == "minimalist":
-            # Minimalist: Simple items, all categories
-            sort_by = "product_display_name"
-            sort_order = "ASC"
-            logger.info("Minimalist persona → simple recommendations")
+            # Minimalist: Simple items, varied order
+            sort_by = "product_id"
+            sort_order = "DESC"  # Reverse for variety from casual
+            logger.info("Minimalist persona → varied order recommendations (reverse)")
         else:
-            logger.info(f"Unknown persona '{persona_style}' → default recommendations")
+            # Default: varied order
+            sort_by = "product_id"
+            sort_order = "ASC"
+            logger.info(f"Unknown persona '{persona_style}' → default varied order recommendations")
 
         # Get products with deterministic sorting
         # Use a larger limit to get variety, then return top results
