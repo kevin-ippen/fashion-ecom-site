@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Filter } from 'lucide-react';
+import { Filter, Sparkles } from 'lucide-react';
 import { productsApi } from '@/api/client';
 import { ProductGrid } from '@/components/product/ProductGrid';
 import { ProductFilters } from '@/types';
@@ -9,18 +9,21 @@ import { ColorSwatches } from '@/components/filters/ColorSwatches';
 import { FilterPills } from '@/components/filters/FilterPills';
 import { PriceRangeSlider } from '@/components/filters/PriceRangeSlider';
 import { MobileFilterDrawer } from '@/components/filters/MobileFilterDrawer';
+import { usePersonaStore } from '@/stores/personaStore';
 
 export function Products() {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<ProductFilters>({});
   const [showFilters, setShowFilters] = useState(false);
+  const { selectedPersona } = usePersonaStore();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['products', page, filters],
+    queryKey: ['products', page, filters, selectedPersona?.user_id],
     queryFn: () =>
       productsApi.list({
         page,
         page_size: 24,
+        user_id: selectedPersona?.user_id, // Enable personalized sorting
         ...filters,
       }),
   });
@@ -56,9 +59,19 @@ export function Products() {
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">All Products</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold">All Products</h1>
+            {selectedPersona && (
+              <span className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-3 py-1 text-sm font-medium text-white">
+                <Sparkles className="h-4 w-4" />
+                Personalized
+              </span>
+            )}
+          </div>
           <p className="mt-2 text-gray-600">
-            {data?.total || 0} products available
+            {selectedPersona
+              ? `${data?.total || 0} products curated for ${selectedPersona.name}`
+              : `${data?.total || 0} products available`}
           </p>
         </div>
 

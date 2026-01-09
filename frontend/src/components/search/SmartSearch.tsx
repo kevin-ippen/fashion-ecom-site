@@ -2,7 +2,8 @@ import { X, Search, TrendingUp, Clock } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { productsApi } from '@/api/products';
+import { searchApi } from '@/api/client';
+import type { Product } from '@/types';
 
 interface SmartSearchProps {
   isOpen: boolean;
@@ -41,7 +42,7 @@ export function SmartSearch({ isOpen, onClose }: SmartSearchProps) {
   // Search for products as user types
   const { data: searchResults } = useQuery({
     queryKey: ['search', query],
-    queryFn: () => productsApi.searchByText(query),
+    queryFn: () => searchApi.searchByText({ query, limit: 5 }),
     enabled: query.length >= 2,
   });
 
@@ -121,7 +122,7 @@ export function SmartSearch({ isOpen, onClose }: SmartSearchProps) {
               </h3>
               {searchResults.products && searchResults.products.length > 0 ? (
                 <div className="space-y-2">
-                  {searchResults.products.slice(0, 5).map((product) => (
+                  {searchResults.products.slice(0, 5).map((product: Product) => (
                     <button
                       key={product.product_id}
                       onClick={() => {
@@ -155,7 +156,7 @@ export function SmartSearch({ isOpen, onClose }: SmartSearchProps) {
               )}
             </div>
           ) : (
-            /* Default Suggestions */}
+            /* Default Suggestions */
             <div className="px-6 py-4 space-y-6">
               {/* Recent Searches */}
               {recentSearches.length > 0 && (

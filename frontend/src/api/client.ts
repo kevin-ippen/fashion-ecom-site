@@ -22,6 +22,7 @@ export const productsApi = {
   list: async (params: {
     page?: number;
     page_size?: number;
+    user_id?: string;
     sort_by?: string;
     sort_order?: 'ASC' | 'DESC';
   } & ProductFilters): Promise<ProductListResponse> => {
