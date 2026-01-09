@@ -276,20 +276,27 @@ async def get_recommendations(
             sort_order = "ASC"
             logger.info(f"Unknown persona '{persona_style}' → default varied order recommendations")
 
-        # Get products with deterministic sorting
-        # Use a larger limit to get variety, then return top results
-        products_data = await repo.get_products(
-            limit=limit * 2,  # Get more candidates for diversity
+        # Get products with diversity: fetch more than needed and randomly sample
+        # This ensures variety across loads while still being persona-appropriate
+        import random
+
+        # Fetch 4x the limit to get a diverse pool for recommendations
+        candidate_pool_size = limit * 4
+        products_pool = await repo.get_products(
+            limit=candidate_pool_size,
             offset=0,
             filters=filters if filters else None,
             sort_by=sort_by,
             sort_order=sort_order
         )
 
-        # Take only the requested limit
-        products_data = products_data[:limit]
-
-        logger.info(f"✅ Returning {len(products_data)} deterministic recommendations")
+        # Randomly sample from the pool to add diversity
+        if len(products_pool) > limit:
+            products_data = random.sample(products_pool, limit)
+            logger.info(f"✅ Sampled {limit} recommendations from pool of {len(products_pool)} for diversity")
+        else:
+            products_data = products_pool
+            logger.info(f"✅ Returning all {len(products_data)} recommendations (pool smaller than limit)")
 
     except Exception as e:
         logger.warning(f"⚠️ Vector Search failed, using rule-based fallback: {e}")

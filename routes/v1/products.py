@@ -168,17 +168,29 @@ async def list_products(
                     sort_order = "ASC"
                     logger.info(f"Unknown persona '{persona_style}' → default varied order")
 
-                # Get products with deterministic sorting
-                products_data = await repo.get_products(
-                    limit=page_size,
+                # Get products with diversity: fetch more than needed and randomly sample
+                # This ensures variety across page loads while still being persona-appropriate
+                import random
+
+                # Fetch 3x the page size to get a diverse pool
+                candidate_pool_size = page_size * 3
+                products_pool = await repo.get_products(
+                    limit=candidate_pool_size,
                     offset=offset,
                     filters=filters if filters else None,
                     sort_by=sort_by,
                     sort_order=sort_order
                 )
+
                 total = await repo.get_product_count(filters if filters else None)
 
-                logger.info(f"✅ Returning page {page} with deterministic sorting ({len(products_data)} products)")
+                # Randomly sample from the pool to add diversity
+                if len(products_pool) > page_size:
+                    products_data = random.sample(products_pool, page_size)
+                    logger.info(f"✅ Sampled {page_size} products from pool of {len(products_pool)} for diversity")
+                else:
+                    products_data = products_pool
+                    logger.info(f"✅ Returning all {len(products_data)} products (pool smaller than page size)")
             else:
                 logger.warning(f"User {user_id} not found, falling back to standard sorting")
                 # Fall through to standard sorting below
