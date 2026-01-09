@@ -23,7 +23,7 @@ class LakebaseRepository:
         self.schema = settings.LAKEBASE_SCHEMA  # fashion_sota
         self.products_table = f"{self.schema}.{settings.LAKEBASE_PRODUCTS_TABLE}"  # fashion_sota.products_lakebase
         self.embeddings_table = f"{self.schema}.product_embeddings"  # fashion_sota.product_embeddings (if synced)
-        self.users_table = f"{self.schema}.{settings.LAKEBASE_USERS_TABLE}"  # fashion_sota.users (includes taste_embedding)
+        self.users_table = f"{self.schema}.{settings.LAKEBASE_USERS_TABLE}"  # fashion_sota.users_lakebase (taste_embedding as JSON string)
 
     def _get_base_product_filter(self) -> str:
         """

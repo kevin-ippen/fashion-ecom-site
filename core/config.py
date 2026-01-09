@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # Lakebase table names (PostgreSQL schema.table format)
     LAKEBASE_SCHEMA: str = "fashion_sota"
     LAKEBASE_PRODUCTS_TABLE: str = "products_lakebase"
-    LAKEBASE_USERS_TABLE: str = "users"  # fashion_sota.users (has taste_embedding column)
+    LAKEBASE_USERS_TABLE: str = "users_lakebase"  # fashion_sota.users_lakebase (taste_embedding as JSON string)
 
     # Databricks Workspace
     @property
