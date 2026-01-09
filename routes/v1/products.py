@@ -101,6 +101,13 @@ async def list_products(
 
                 user_embedding = np.array(embedding_data, dtype=np.float32)
 
+                # CRITICAL: Normalize the user embedding to match product embeddings
+                # Product embeddings have L2 norm = 1.0, so user embedding must too
+                embedding_norm = np.linalg.norm(user_embedding)
+                if embedding_norm > 0:
+                    user_embedding = user_embedding / embedding_norm
+                    logger.info(f"Normalized user embedding (original norm: {embedding_norm:.6f}, new norm: {np.linalg.norm(user_embedding):.6f})")
+
                 # Get personalized results via vector search (unfiltered)
                 # Get extra results to account for pagination
                 num_candidates = page * page_size + 50

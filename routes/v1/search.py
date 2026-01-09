@@ -223,6 +223,13 @@ async def get_recommendations(
 
             user_embedding = np.array(embedding_data, dtype=np.float32)
 
+            # CRITICAL: Normalize the user embedding to match product embeddings
+            # Product embeddings have L2 norm = 1.0, so user embedding must too
+            embedding_norm = np.linalg.norm(user_embedding)
+            if embedding_norm > 0:
+                user_embedding = user_embedding / embedding_norm
+                logger.info(f"Normalized user embedding (original norm: {embedding_norm:.6f}, new norm: {np.linalg.norm(user_embedding):.6f})")
+
             logger.info(f"✅ Using BATCH pre-calculated taste_embedding from fashion_sota.users")
             logger.info(f"   Shape: {user_embedding.shape}, dtype: {user_embedding.dtype}")
 
