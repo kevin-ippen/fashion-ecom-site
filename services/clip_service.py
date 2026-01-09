@@ -64,8 +64,14 @@ class CLIPService:
 
             logger.info(f"Calling CLIP text endpoint: '{text[:100]}...'")
 
-            # Call Model Serving endpoint (longer timeout for cold starts)
-            timeout = aiohttp.ClientTimeout(total=120)  # 2 minutes for cold starts
+            # Call Model Serving endpoint with generous timeouts for cold starts
+            # Separate connect vs read timeouts to handle slow warmup
+            timeout = aiohttp.ClientTimeout(
+                total=180,      # 3 minutes total
+                connect=60,     # 1 minute to establish connection
+                sock_read=120   # 2 minutes to read response
+            )
+
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     self.text_endpoint_url,
@@ -75,7 +81,7 @@ class CLIPService:
                     if response.status != 200:
                         error_text = await response.text()
                         logger.error(f"CLIP text endpoint error {response.status}: {error_text}")
-                        raise Exception(f"CLIP text endpoint returned {response.status}")
+                        raise Exception(f"CLIP Model Serving endpoint error: HTTP {response.status}")
 
                     result = await response.json()
 
@@ -122,8 +128,13 @@ class CLIPService:
 
             logger.info(f"Calling CLIP image endpoint (size: {len(image_bytes)} bytes)")
 
-            # Call Model Serving endpoint (longer timeout for cold starts)
-            timeout = aiohttp.ClientTimeout(total=120)  # 2 minutes for cold starts
+            # Call Model Serving endpoint with generous timeouts for cold starts
+            timeout = aiohttp.ClientTimeout(
+                total=180,      # 3 minutes total
+                connect=60,     # 1 minute to establish connection
+                sock_read=120   # 2 minutes to read response
+            )
+
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     self.image_endpoint_url,
@@ -133,7 +144,7 @@ class CLIPService:
                     if response.status != 200:
                         error_text = await response.text()
                         logger.error(f"CLIP image endpoint error {response.status}: {error_text}")
-                        raise Exception(f"CLIP image endpoint returned {response.status}")
+                        raise Exception(f"CLIP Model Serving endpoint error: HTTP {response.status}")
 
                     result = await response.json()
 

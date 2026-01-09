@@ -86,10 +86,21 @@ async def search_by_text(
         )
 
     except Exception as e:
-        logger.error(f"Text search error: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Text search failed: {str(e)}")
+        # Classify error type for better debugging
+        error_type = type(e).__name__
+        error_msg = str(e)
+
+        if "timeout" in error_msg.lower() or "TimeoutError" in error_type:
+            logger.error(f"⏱️ CLIP Model Serving timeout: {error_msg}")
+            raise HTTPException(status_code=504, detail=f"CLIP endpoint timeout (cold start): {error_msg}")
+        elif "vector" in error_msg.lower() or "index" in error_msg.lower():
+            logger.error(f"🔍 Vector Search error: {error_type}: {error_msg}")
+            raise HTTPException(status_code=500, detail=f"Vector Search failed: {error_msg}")
+        else:
+            logger.error(f"❌ Text search error: {error_type}: {error_msg}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            raise HTTPException(status_code=500, detail=f"Text search failed: {error_msg}")
 
 
 @router.post("/image", response_model=SearchResponse)
@@ -152,8 +163,8 @@ async def search_by_image(
 async def get_recommendations(
     user_id: str,
     limit: int = 20,
-    restrict_category: bool = True,
-    restrict_price: bool = True,
+    restrict_category: bool = False,  # Changed to False - too restrictive
+    restrict_price: bool = False,      # Changed to False - let vector search decide
     restrict_color: bool = False,
     db: AsyncSession = Depends(get_async_db)
 ):
@@ -247,28 +258,53 @@ async def get_recommendations(
             logger.info(f"✅ Hybrid Vector Search returned {len(products_data)} products")
 
             # Apply application-layer filtering to vector search results
+            # Use LENIENT filtering to avoid dropping all results
             if app_filters:
+                # Log sample candidates before filtering
+                if len(products_data) > 0:
+                    sample = products_data[0]
+                    logger.info(f"Sample candidate before filtering: master_category={sample.get('master_category')}, sub_category={sample.get('sub_category')}, base_color={sample.get('base_color')}")
+
                 filtered_data = []
+                filter_stats = {"category_dropped": 0, "color_dropped": 0}
+
                 for p in products_data:
-                    # Category filter
+                    # Category filter - check both master_category and sub_category
+                    # preferred_categories might contain either level
                     if "categories" in app_filters:
-                        if p.get("master_category") not in app_filters["categories"]:
+                        master_cat = p.get("master_category", "")
+                        sub_cat = p.get("sub_category", "")
+                        article = p.get("article_type", "")
+
+                        # Match if ANY category field matches ANY preferred category
+                        category_match = any(
+                            pref in [master_cat, sub_cat, article]
+                            for pref in app_filters["categories"]
+                        )
+
+                        if not category_match:
+                            filter_stats["category_dropped"] += 1
                             continue
 
-                    # Price filter - need to get price from products_lakebase
-                    # For now, skip price filtering in this layer since product_embeddings doesn't have price
-                    # We'll fetch price when converting to ProductDetail
-
-                    # Color filter
+                    # Color filter - more lenient
                     if "colors" in app_filters:
                         product_color = (p.get("base_color") or "").title()
                         normalized_colors = [c.title() for c in app_filters["colors"]]
-                        if product_color not in normalized_colors:
-                            continue
+                        if product_color and product_color not in normalized_colors:
+                            filter_stats["color_dropped"] += 1
+                            # Don't drop - color is a soft preference
+                            # continue
 
                     filtered_data.append(p)
 
+                logger.info(f"Filter stats: {filter_stats}")
                 logger.info(f"After application filters: {len(filtered_data)} products (removed {len(products_data) - len(filtered_data)})")
+
+                # Fallback: If filters removed everything, retry without filters
+                if len(filtered_data) == 0 and len(products_data) > 0:
+                    logger.warning(f"⚠️ Filters removed all results! Using unfiltered candidates.")
+                    filtered_data = products_data
+
                 products_data = filtered_data
 
         else:
