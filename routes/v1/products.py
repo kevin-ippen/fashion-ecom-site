@@ -86,64 +86,100 @@ async def list_products(
 
     # Check if personalized sorting is requested
     if user_id:
-        logger.info(f"🎯 Personalized product listing for user {user_id}")
+        logger.info(f"🎯 Deterministic persona-based sorting for user {user_id}")
         try:
-            # Get user and their taste embedding
+            # Get user to determine their style profile
             user = await repo.get_user_by_id(user_id)
 
-            if user and user.get("taste_embedding"):
-                from services.vector_search_service import vector_search_service
+            if user:
+                # Import persona mappings to determine style
+                from routes.v1.users import CURATED_PERSONA_IDS
 
-                # Parse embedding
-                embedding_data = user["taste_embedding"]
-                if isinstance(embedding_data, str):
-                    embedding_data = json.loads(embedding_data)
+                # Find persona style for this user_id
+                persona_style = None
+                for style, pid in CURATED_PERSONA_IDS.items():
+                    if pid == user_id:
+                        persona_style = style
+                        break
 
-                user_embedding = np.array(embedding_data, dtype=np.float32)
+                # If not a curated persona, use style_profile from database
+                if not persona_style:
+                    persona_style = user.get("style_profile", "").lower()
 
-                # CRITICAL: Normalize the user embedding to match product embeddings
-                # Product embeddings have L2 norm = 1.0, so user embedding must too
-                embedding_norm = np.linalg.norm(user_embedding)
-                if embedding_norm > 0:
-                    user_embedding = user_embedding / embedding_norm
-                    logger.info(f"Normalized user embedding (original norm: {embedding_norm:.6f}, new norm: {np.linalg.norm(user_embedding):.6f})")
+                logger.info(f"User {user_id} has persona style: {persona_style}")
 
-                # Get personalized results via vector search (unfiltered)
-                # Get extra results to account for pagination
-                num_candidates = page * page_size + 50
-                logger.info(f"Getting {num_candidates} candidates via vector search for page {page}")
+                # Apply deterministic sorting based on persona
+                # Also apply user's preferred categories if available
+                preferred_cats = user.get("preferred_categories", [])
+                if preferred_cats and len(preferred_cats) > 0 and not master_category:
+                    # Add first preferred category to filters
+                    filters["master_category"] = preferred_cats[0]
+                    logger.info(f"Added preferred category filter: {preferred_cats[0]}")
 
-                products_data = await vector_search_service.search_hybrid(
-                    query_vector=user_embedding,
-                    num_results=num_candidates,
-                    filters=None  # Index doesn't support filters
+                # Determine sort strategy based on persona
+                if persona_style == "luxury":
+                    # Luxury: Show expensive items first
+                    sort_by = "price"
+                    sort_order = "DESC"
+                    logger.info("Luxury persona → sorting by price DESC")
+                elif persona_style == "budget":
+                    # Budget: Show cheap items first
+                    sort_by = "price"
+                    sort_order = "ASC"
+                    logger.info("Budget persona → sorting by price ASC")
+                elif persona_style == "trendy":
+                    # Trendy: Show newest products (highest IDs)
+                    sort_by = "product_id"
+                    sort_order = "DESC"
+                    logger.info("Trendy persona → sorting by product_id DESC (newest)")
+                elif persona_style == "vintage":
+                    # Vintage: Show older products (lowest IDs)
+                    sort_by = "product_id"
+                    sort_order = "ASC"
+                    logger.info("Vintage persona → sorting by product_id ASC (oldest)")
+                elif persona_style == "athletic":
+                    # Athletic: Filter to athletic categories, sort by name
+                    if not master_category and not sub_category:
+                        filters["master_category"] = "Apparel"
+                    sort_by = "product_display_name"
+                    sort_order = "ASC"
+                    logger.info("Athletic persona → filtering Apparel, sorting by name")
+                elif persona_style == "formal":
+                    # Formal: Filter to formal categories, sort by price DESC
+                    if not master_category:
+                        filters["master_category"] = "Apparel"
+                    sort_by = "price"
+                    sort_order = "DESC"
+                    logger.info("Formal persona → filtering Apparel, sorting by price DESC")
+                elif persona_style == "casual":
+                    # Casual: Show comfortable items, sorted by name
+                    sort_by = "product_display_name"
+                    sort_order = "ASC"
+                    logger.info("Casual persona → sorting by name")
+                elif persona_style == "minimalist":
+                    # Minimalist: Show simple items, sorted by name
+                    sort_by = "product_display_name"
+                    sort_order = "ASC"
+                    logger.info("Minimalist persona → sorting by name")
+                else:
+                    # Default: sort by name
+                    sort_by = "product_display_name"
+                    sort_order = "ASC"
+                    logger.info(f"Unknown persona '{persona_style}' → default sorting by name")
+
+                # Get products with deterministic sorting
+                products_data = await repo.get_products(
+                    limit=page_size,
+                    offset=offset,
+                    filters=filters if filters else None,
+                    sort_by=sort_by,
+                    sort_order=sort_order
                 )
+                total = await repo.get_product_count(filters if filters else None)
 
-                # Apply filters in application layer
-                if filters:
-                    filtered_data = []
-                    for p in products_data:
-                        if gender and p.get("gender") != gender:
-                            continue
-                        if master_category and p.get("master_category") != master_category:
-                            continue
-                        if sub_category and p.get("sub_category") != sub_category:
-                            continue
-                        if base_color and p.get("base_color") != base_color:
-                            continue
-                        # Note: season, min_price, max_price not in product_embeddings table
-                        filtered_data.append(p)
-
-                    logger.info(f"After filters: {len(filtered_data)} products")
-                    products_data = filtered_data
-
-                # Paginate the results
-                total = len(products_data)
-                products_data = products_data[offset:offset+page_size]
-
-                logger.info(f"✅ Returning page {page} of personalized results ({len(products_data)} products)")
+                logger.info(f"✅ Returning page {page} with deterministic sorting ({len(products_data)} products)")
             else:
-                logger.warning(f"User {user_id} has no taste_embedding, falling back to standard sorting")
+                logger.warning(f"User {user_id} not found, falling back to standard sorting")
                 # Fall through to standard sorting below
                 products_data = await repo.get_products(
                     limit=page_size,
@@ -155,7 +191,9 @@ async def list_products(
                 total = await repo.get_product_count(filters if filters else None)
 
         except Exception as e:
-            logger.error(f"Personalization failed: {e}, falling back to standard sorting")
+            logger.error(f"Deterministic persona sorting failed: {e}, falling back to standard sorting")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             # Fall through to standard sorting
             products_data = await repo.get_products(
                 limit=page_size,
