@@ -184,13 +184,29 @@ async def list_products(
 
                 total = await repo.get_product_count(filters if filters else None)
 
-                # Randomly sample from the pool to add diversity
-                if len(products_pool) > page_size:
-                    products_data = random.sample(products_pool, page_size)
-                    logger.info(f"✅ Sampled {page_size} products from pool of {len(products_pool)} for diversity")
-                else:
-                    products_data = products_pool
-                    logger.info(f"✅ Returning all {len(products_data)} products (pool smaller than page size)")
+                # Apply category diversity: max 3 products per master_category
+                # This prevents "whole page of shoes" scenarios for demo
+                from collections import defaultdict
+
+                category_counts = defaultdict(int)
+                diversified_products = []
+                max_per_category = 3
+
+                # Shuffle pool for randomness, then iterate and limit per category
+                random.shuffle(products_pool)
+
+                for product in products_pool:
+                    category = product.get("master_category", "Unknown")
+                    if category_counts[category] < max_per_category:
+                        diversified_products.append(product)
+                        category_counts[category] += 1
+
+                        if len(diversified_products) >= page_size:
+                            break
+
+                products_data = diversified_products
+                logger.info(f"✅ Category-diversified products: {len(products_data)} from pool of {len(products_pool)}")
+                logger.info(f"   Category distribution: {dict(category_counts)}")
             else:
                 logger.warning(f"User {user_id} not found, falling back to standard sorting")
                 # Fall through to standard sorting below
