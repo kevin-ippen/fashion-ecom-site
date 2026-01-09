@@ -482,11 +482,48 @@ async def get_complementary_products(
             limit=filter_limit
         )
 
-        # Randomly select 'limit' items from filtered results for variety
-        if len(filtered) > limit:
-            filtered = random.sample(filtered, limit)
+        # Apply category diversity constraint: max 1 Footwear, max 1 Accessories, rest Apparel
+        # This ensures outfit recommendations are primarily apparel items with minimal accessories/shoes
+        category_balanced = []
+        footwear_count = 0
+        accessories_count = 0
 
-        logger.info(f"After filtering and randomization: {len(filtered)} products")
+        # Separate candidates by master_category
+        apparel_items = [p for p in filtered if p.get("master_category") == "Apparel"]
+        footwear_items = [p for p in filtered if p.get("master_category") == "Footwear"]
+        accessories_items = [p for p in filtered if p.get("master_category") == "Accessories"]
+
+        # Shuffle each category for variety
+        random.shuffle(apparel_items)
+        random.shuffle(footwear_items)
+        random.shuffle(accessories_items)
+
+        logger.info(f"Category distribution: Apparel={len(apparel_items)}, Footwear={len(footwear_items)}, Accessories={len(accessories_items)}")
+
+        # Strategy: Fill with apparel first, then add at most 1 footwear and 1 accessories
+        # For limit=4: aim for 3-4 apparel, 0-1 footwear, 0-1 accessories
+        target_apparel = max(limit - 2, int(limit * 0.75))  # At least 75% apparel
+
+        # Add apparel items (priority)
+        category_balanced.extend(apparel_items[:target_apparel])
+
+        # Add 1 footwear if available and we have space
+        if len(category_balanced) < limit and footwear_items:
+            category_balanced.append(footwear_items[0])
+            footwear_count = 1
+
+        # Add 1 accessories if available and we have space
+        if len(category_balanced) < limit and accessories_items:
+            category_balanced.append(accessories_items[0])
+            accessories_count = 1
+
+        # Fill remaining slots with more apparel if needed
+        remaining_slots = limit - len(category_balanced)
+        if remaining_slots > 0 and len(apparel_items) > target_apparel:
+            category_balanced.extend(apparel_items[target_apparel:target_apparel + remaining_slots])
+
+        filtered = category_balanced
+        logger.info(f"After category balancing: {len(filtered)} products (Footwear={footwear_count}, Accessories={accessories_count}, Apparel={len(filtered) - footwear_count - accessories_count})")
 
         # Convert to ProductDetail models and add metadata
         products = []
