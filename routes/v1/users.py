@@ -38,33 +38,38 @@ def format_persona(user_data: dict) -> dict:
     """
     Transform database user record into persona format expected by frontend
 
-    Database columns (fashion_sota.users schema):
+    Database columns expected:
     - user_id: str
-    - style_profile: str (e.g., "budget_conscious", "luxury_seeker")
-    - preferred_categories: array<string>
-    - color_prefs: map<string,double> (need to extract keys)
-    - brand_prefs: map<string,double> (need to extract keys)
-    - min_price, max_price, avg_price, p25_price, p75_price: float
-    - num_interactions: bigint
-    - taste_embedding: array<double> (512-dim)
+    - segment: str (e.g., "budget", "luxury", "trendy")
+    - avg_price_point: float
+    - preferred_categories: list/array
+    - color_prefs: list/array
+    - brand_prefs: list/array
+    - min_price: float
+    - max_price: float
+    - avg_price: float
+    - p25_price: float
+    - p75_price: float
+    - num_interactions: int
+    - style_tags: list/array
     """
-    # Generate a display name from the style_profile
-    style_profile = user_data.get("style_profile", "Shopper")
+    # Generate a display name from the segment
+    segment = user_data.get("segment", "Shopper")
     segment_names = {
-        "budget_conscious": "Budget-Conscious Shopper",
-        "luxury_seeker": "Luxury Fashion Enthusiast",
-        "trendsetter": "Trend-Following Shopper",
+        "budget": "Budget-Conscious Shopper",
+        "luxury": "Luxury Fashion Enthusiast",
+        "trendy": "Trend-Following Shopper",
         "minimalist": "Minimalist Style Enthusiast",
-        "vintage_lover": "Vintage Style Enthusiast",
+        "vintage": "Vintage Style Enthusiast",
         "athleisure": "Athleisure Advocate",
-        "professional": "Formal Wear Professional",
+        "formal": "Formal Wear Professional",
         "casual": "Casual Style Lover"
     }
-    name = segment_names.get(style_profile.lower() if style_profile else "", f"{style_profile.title() if style_profile else 'Fashion'} Shopper")
+    name = segment_names.get(segment.lower(), f"{segment.title()} Shopper")
 
     # Generate a description from the user's preferences
     preferred_cats = user_data.get("preferred_categories", [])
-    avg_price = user_data.get("avg_price", 0)
+    avg_price = user_data.get("avg_price_point", user_data.get("avg_price", 0))
 
     if preferred_cats and len(preferred_cats) > 0:
         cats_str = " and ".join(preferred_cats[:2])
@@ -72,38 +77,23 @@ def format_persona(user_data: dict) -> dict:
     else:
         description = f"Fashion enthusiast with an average spend of ${avg_price:.2f}"
 
-    # Extract color preferences from map (get keys where value > threshold)
-    color_prefs_map = user_data.get("color_prefs", {})
-    if isinstance(color_prefs_map, dict):
-        # Get top colors sorted by preference score
-        color_prefs = sorted(color_prefs_map.keys(), key=lambda k: color_prefs_map[k], reverse=True)[:5]
-    else:
-        color_prefs = []
-
-    # Extract brand preferences from map
-    brand_prefs_map = user_data.get("brand_prefs", {})
-    if isinstance(brand_prefs_map, dict):
-        brand_prefs = sorted(brand_prefs_map.keys(), key=lambda k: brand_prefs_map[k], reverse=True)[:5]
-    else:
-        brand_prefs = []
-
     return {
         "user_id": user_data.get("user_id"),
         "name": name,
         "description": description,
-        "segment": style_profile or "shopper",  # Use style_profile as segment
+        "segment": segment,
         "avg_price_point": avg_price,
-        "preferred_categories": preferred_cats,
-        "color_prefs": color_prefs,
-        "brand_prefs": brand_prefs,
+        "preferred_categories": user_data.get("preferred_categories", []),
+        "color_prefs": user_data.get("color_prefs", []),
+        "brand_prefs": user_data.get("brand_prefs", []),
         "min_price": user_data.get("min_price", 0),
         "max_price": user_data.get("max_price", 0),
-        "avg_price": avg_price,
+        "avg_price": user_data.get("avg_price", avg_price),
         "p25_price": user_data.get("p25_price", 0),
         "p75_price": user_data.get("p75_price", 0),
         "num_interactions": user_data.get("num_interactions", 0),
-        "purchase_history_ids": [],  # Not in schema, would need separate table
-        "style_tags": []  # Could derive from style_profile if needed
+        "purchase_history_ids": user_data.get("purchase_history_ids", []),
+        "style_tags": user_data.get("style_tags", [])
     }
 
 

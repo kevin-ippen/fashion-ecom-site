@@ -23,7 +23,9 @@ class LakebaseRepository:
         self.schema = settings.LAKEBASE_SCHEMA  # fashion_sota
         self.products_table = f"{self.schema}.{settings.LAKEBASE_PRODUCTS_TABLE}"  # fashion_sota.products_lakebase
         self.embeddings_table = f"{self.schema}.product_embeddings"  # fashion_sota.product_embeddings (if synced)
-        self.users_table = f"{self.schema}.{settings.LAKEBASE_USERS_TABLE}"  # fashion_sota.users (includes taste_embedding)
+        # TEMP: Users are still in fashion_demo schema until migrated
+        self.users_table = f"fashion_demo.{settings.LAKEBASE_USERS_TABLE}"  # fashion_demo.usersdb
+        self.user_features_table = f"fashion_demo.{settings.LAKEBASE_USER_FEATURES_TABLE}"  # fashion_demo.user_style_featuresdb
 
     def _get_base_product_filter(self) -> str:
         """
@@ -202,12 +204,14 @@ class LakebaseRepository:
         return results[0] if results else None
 
     async def get_user_style_features(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get user style features by user ID"""
+        query = f"""
+            SELECT *
+            FROM {self.user_features_table}
+            WHERE user_id = :user_id
         """
-        Get user with taste embedding (backwards compatibility method)
-        Note: taste_embedding is now in the users table itself
-        """
-        # Just return the user record - it includes taste_embedding
-        return await self.get_user_by_id(user_id)
+        results = await self._execute_query(query, {"user_id": user_id})
+        return results[0] if results else None
 
     async def get_filter_options(self) -> Dict[str, List[str]]:
         """Get all available filter options"""

@@ -184,16 +184,22 @@ async def get_recommendations(
     logger.info(f"Filter settings: category={restrict_category}, price={restrict_price}, color={restrict_color}")
 
     try:
-        # Get taste_embedding from fashion_sota.users (BATCH PRE-CALCULATED)
-        logger.info(f"🔍 Looking for pre-calculated taste_embedding for user {user_id} in fashion_sota.users...")
+        # Try to get user embedding from user_style_features table (BATCH PRE-CALCULATED)
+        logger.info(f"🔍 Looking for pre-calculated embedding for user {user_id} in user_style_featuresdb...")
+        user_features = await repo.get_user_style_features(user_id)
 
-        # Check if user has taste_embedding (already fetched above)
-        if user.get("taste_embedding"):
-            # Use Hybrid Vector Search with user taste embedding
+        if user_features:
+            logger.info(f"✅ Found user_style_features record for {user_id}")
+            logger.info(f"   Columns: {list(user_features.keys())}")
+        else:
+            logger.warning(f"❌ No user_style_features record found for {user_id}")
+
+        if user_features and user_features.get("user_embedding"):
+            # Use Hybrid Vector Search with user embedding
             from services.vector_search_service import vector_search_service
 
-            # Parse embedding data
-            embedding_data = user["taste_embedding"]
+            # Parse JSON string to list, then convert to numpy array
+            embedding_data = user_features["user_embedding"]
             if isinstance(embedding_data, str):
                 embedding_data = json.loads(embedding_data)
             elif isinstance(embedding_data, list):
@@ -204,8 +210,7 @@ async def get_recommendations(
 
             user_embedding = np.array(embedding_data, dtype=np.float32)
 
-            logger.info(f"✅ Using BATCH pre-calculated taste_embedding from fashion_sota.users")
-            logger.info(f"   Shape: {user_embedding.shape}, dtype: {user_embedding.dtype}")
+            logger.info(f"✅ Using BATCH pre-calculated user embedding: shape={user_embedding.shape}, dtype={user_embedding.dtype}")
 
             # Build flexible filters based on parameters
             filters = {}
@@ -248,11 +253,11 @@ async def get_recommendations(
                 logger.info(f"✅ Vector Search without filters returned {len(products_data)} products")
 
         else:
-            # Fallback to rule-based if no taste_embedding
-            logger.warning(f"⚠️ No taste_embedding field found for {user_id}")
-            logger.warning(f"   User exists in fashion_sota.users but taste_embedding is NULL")
+            # Fallback to rule-based if no user embedding
+            logger.warning(f"⚠️ No user_embedding field found for {user_id}")
+            logger.warning(f"   This user exists in usersdb but not in user_style_featuresdb with embeddings")
             logger.warning(f"   Falling back to rule-based recommendations based on preferences")
-            raise Exception("No taste_embedding - use fallback")
+            raise Exception("No user embedding - use fallback")
 
     except Exception as e:
         logger.warning(f"⚠️ Vector Search failed, using rule-based fallback: {e}")
