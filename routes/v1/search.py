@@ -169,22 +169,30 @@ async def get_recommendations(
     """
     repo = LakebaseRepository(db)
 
-    # Load persona to get preferences
-    from routes.v1.users import load_personas
+    # Get user from database
+    user = await repo.get_user_by_id(user_id)
 
-    personas = load_personas()
-    persona = next((p for p in personas if p["user_id"] == user_id), None)
-
-    if not persona:
+    if not user:
         raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+    # Format as persona for backwards compatibility
+    from routes.v1.users import format_persona
+    persona = format_persona(user)
 
     logger.info(f"Getting recommendations for user {user_id} - {persona.get('name', 'Unknown')}")
     logger.info(f"Persona preferences: categories={persona.get('preferred_categories')}, colors={persona.get('color_prefs')}")
     logger.info(f"Filter settings: category={restrict_category}, price={restrict_price}, color={restrict_color}")
 
     try:
-        # Try to get user embedding from user_style_features table
+        # Try to get user embedding from user_style_features table (BATCH PRE-CALCULATED)
+        logger.info(f"🔍 Looking for pre-calculated embedding for user {user_id} in user_style_featuresdb...")
         user_features = await repo.get_user_style_features(user_id)
+
+        if user_features:
+            logger.info(f"✅ Found user_style_features record for {user_id}")
+            logger.info(f"   Columns: {list(user_features.keys())}")
+        else:
+            logger.warning(f"❌ No user_style_features record found for {user_id}")
 
         if user_features and user_features.get("user_embedding"):
             # Use Hybrid Vector Search with user embedding
@@ -194,10 +202,15 @@ async def get_recommendations(
             embedding_data = user_features["user_embedding"]
             if isinstance(embedding_data, str):
                 embedding_data = json.loads(embedding_data)
-            
+            elif isinstance(embedding_data, list):
+                pass  # Already a list
+            else:
+                logger.error(f"❌ Unexpected embedding type: {type(embedding_data)}")
+                raise Exception(f"Invalid embedding type: {type(embedding_data)}")
+
             user_embedding = np.array(embedding_data, dtype=np.float32)
 
-            logger.info(f"✅ Found user embedding: shape={user_embedding.shape}")
+            logger.info(f"✅ Using BATCH pre-calculated user embedding: shape={user_embedding.shape}, dtype={user_embedding.dtype}")
 
             # Build flexible filters based on parameters
             filters = {}
@@ -241,11 +254,13 @@ async def get_recommendations(
 
         else:
             # Fallback to rule-based if no user embedding
-            logger.warning(f"No user embedding found for {user_id}, using rule-based recommendations")
+            logger.warning(f"⚠️ No user_embedding field found for {user_id}")
+            logger.warning(f"   This user exists in usersdb but not in user_style_featuresdb with embeddings")
+            logger.warning(f"   Falling back to rule-based recommendations based on preferences")
             raise Exception("No user embedding - use fallback")
 
     except Exception as e:
-        logger.warning(f"Vector Search failed, using rule-based fallback: {e}")
+        logger.warning(f"⚠️ Vector Search failed, using rule-based fallback: {e}")
 
         # Fallback: Rule-based recommendations
         filters = {}
