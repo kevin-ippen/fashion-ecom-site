@@ -194,132 +194,93 @@ async def get_recommendations(
     logger.info(f"Persona preferences: categories={persona.get('preferred_categories')}, colors={persona.get('color_prefs')}")
     logger.info(f"Filter settings: category={restrict_category}, price={restrict_price}, color={restrict_color}")
 
+    # Import persona mappings to determine style (define outside try block for scoping)
+    from routes.v1.users import CURATED_PERSONA_IDS
+
+    # Find persona style for this user_id
+    persona_style = None
+    for style, pid in CURATED_PERSONA_IDS.items():
+        if pid == user_id:
+            persona_style = style
+            break
+
+    # If not a curated persona, use style_profile from database
+    if not persona_style:
+        persona_style = user.get("style_profile", "").lower()
+
+    logger.info(f"User {user_id} has persona style: {persona_style}")
+
     try:
-        # Get taste_embedding from fashion_sota.users (BATCH PRE-CALCULATED)
-        logger.info(f"🔍 Looking for pre-calculated taste_embedding for user {user_id} in fashion_sota.users...")
-        logger.info(f"   User record keys: {list(user.keys())}")
-        logger.info(f"   Has taste_embedding key: {'taste_embedding' in user}")
-        if 'taste_embedding' in user:
-            te_value = user.get('taste_embedding')
-            logger.info(f"   taste_embedding type: {type(te_value)}")
-            logger.info(f"   taste_embedding is None: {te_value is None}")
-            if te_value:
-                logger.info(f"   taste_embedding length: {len(te_value) if hasattr(te_value, '__len__') else 'N/A'}")
+        # DETERMINISTIC RECOMMENDATIONS based on persona style
+        logger.info(f"🎯 Deterministic recommendations for user {user_id}")
 
-        # Check if user has taste_embedding (already fetched above)
-        if user.get("taste_embedding"):
-            # Use Hybrid Vector Search with user taste embedding
-            from services.vector_search_service import vector_search_service
+        # Build filters for recommendations - ALWAYS apply user's preferred categories
+        filters = {}
+        preferred_cats = user.get("preferred_categories", [])
 
-            # Parse embedding data
-            embedding_data = user["taste_embedding"]
-            if isinstance(embedding_data, str):
-                embedding_data = json.loads(embedding_data)
-            elif isinstance(embedding_data, list):
-                pass  # Already a list
-            else:
-                logger.error(f"❌ Unexpected embedding type: {type(embedding_data)}")
-                raise Exception(f"Invalid embedding type: {type(embedding_data)}")
+        # For recommendations, ALWAYS filter to user's preferences (more focused than product listing)
+        if preferred_cats and len(preferred_cats) > 0:
+            # Use first preferred category
+            filters["master_category"] = preferred_cats[0]
+            logger.info(f"Filtering recommendations to category: {preferred_cats[0]}")
 
-            user_embedding = np.array(embedding_data, dtype=np.float32)
+        # Determine sort strategy based on persona (same logic as product listing)
+        sort_by = "product_display_name"  # Default
+        sort_order = "ASC"
 
-            # CRITICAL: Normalize the user embedding to match product embeddings
-            # Product embeddings have L2 norm = 1.0, so user embedding must too
-            embedding_norm = np.linalg.norm(user_embedding)
-            if embedding_norm > 0:
-                user_embedding = user_embedding / embedding_norm
-                logger.info(f"Normalized user embedding (original norm: {embedding_norm:.6f}, new norm: {np.linalg.norm(user_embedding):.6f})")
-
-            logger.info(f"✅ Using BATCH pre-calculated taste_embedding from fashion_sota.users")
-            logger.info(f"   Shape: {user_embedding.shape}, dtype: {user_embedding.dtype}")
-
-            # Build filters for application-layer filtering (NOT for vector search index)
-            # Vector search index only has embedding column, so we do unfiltered search
-            # and filter results in application layer
-            app_filters = {}
-
-            if restrict_category and persona.get("preferred_categories"):
-                app_filters["categories"] = persona["preferred_categories"]
-                logger.info(f"Will filter to categories: {persona['preferred_categories']}")
-
-            # Only set price filter if we have valid price data
-            if restrict_price and persona.get("p25_price") and persona.get("p75_price"):
-                min_price = persona["p25_price"] * 0.8
-                max_price = persona["p75_price"] * 1.2
-                app_filters["min_price"] = min_price
-                app_filters["max_price"] = max_price
-                logger.info(f"Will filter to price range: ${min_price:.0f}-${max_price:.0f}")
-
-            if restrict_color and persona.get("color_prefs"):
-                app_filters["colors"] = persona["color_prefs"]
-                logger.info(f"Will filter to colors: {persona['color_prefs']}")
-
-            # Get more results from vector search (unfiltered) so we have enough after filtering
-            logger.info(f"Performing unfiltered vector search to get {limit * 4} candidates")
-            products_data = await vector_search_service.search_hybrid(
-                query_vector=user_embedding,
-                num_results=limit * 4,  # Get more to compensate for filtering
-                filters=None  # NO FILTERS - index doesn't support them
-            )
-
-            logger.info(f"✅ Hybrid Vector Search returned {len(products_data)} products")
-
-            # Apply application-layer filtering to vector search results
-            # Use LENIENT filtering to avoid dropping all results
-            if app_filters:
-                # Log sample candidates before filtering
-                if len(products_data) > 0:
-                    sample = products_data[0]
-                    logger.info(f"Sample candidate before filtering: master_category={sample.get('master_category')}, sub_category={sample.get('sub_category')}, base_color={sample.get('base_color')}")
-
-                filtered_data = []
-                filter_stats = {"category_dropped": 0, "color_dropped": 0}
-
-                for p in products_data:
-                    # Category filter - check both master_category and sub_category
-                    # preferred_categories might contain either level
-                    if "categories" in app_filters:
-                        master_cat = p.get("master_category", "")
-                        sub_cat = p.get("sub_category", "")
-                        article = p.get("article_type", "")
-
-                        # Match if ANY category field matches ANY preferred category
-                        category_match = any(
-                            pref in [master_cat, sub_cat, article]
-                            for pref in app_filters["categories"]
-                        )
-
-                        if not category_match:
-                            filter_stats["category_dropped"] += 1
-                            continue
-
-                    # Color filter - more lenient
-                    if "colors" in app_filters:
-                        product_color = (p.get("base_color") or "").title()
-                        normalized_colors = [c.title() for c in app_filters["colors"]]
-                        if product_color and product_color not in normalized_colors:
-                            filter_stats["color_dropped"] += 1
-                            # Don't drop - color is a soft preference
-                            # continue
-
-                    filtered_data.append(p)
-
-                logger.info(f"Filter stats: {filter_stats}")
-                logger.info(f"After application filters: {len(filtered_data)} products (removed {len(products_data) - len(filtered_data)})")
-
-                # Fallback: If filters removed everything, retry without filters
-                if len(filtered_data) == 0 and len(products_data) > 0:
-                    logger.warning(f"⚠️ Filters removed all results! Using unfiltered candidates.")
-                    filtered_data = products_data
-
-                products_data = filtered_data
-
+        if persona_style == "luxury":
+            sort_by = "price"
+            sort_order = "DESC"
+            logger.info("Luxury persona → expensive recommendations first")
+        elif persona_style == "budget":
+            sort_by = "price"
+            sort_order = "ASC"
+            logger.info("Budget persona → affordable recommendations first")
+        elif persona_style == "trendy":
+            sort_by = "product_id"
+            sort_order = "DESC"
+            logger.info("Trendy persona → newest recommendations first")
+        elif persona_style == "vintage":
+            sort_by = "product_id"
+            sort_order = "ASC"
+            logger.info("Vintage persona → classic recommendations first")
+        elif persona_style == "athletic":
+            if not filters.get("master_category"):
+                filters["master_category"] = "Apparel"
+            sort_by = "product_display_name"
+            sort_order = "ASC"
+            logger.info("Athletic persona → Apparel recommendations")
+        elif persona_style == "formal":
+            if not filters.get("master_category"):
+                filters["master_category"] = "Apparel"
+            sort_by = "price"
+            sort_order = "DESC"
+            logger.info("Formal persona → premium Apparel recommendations")
+        elif persona_style == "casual":
+            sort_by = "product_display_name"
+            sort_order = "ASC"
+            logger.info("Casual persona → alphabetical recommendations")
+        elif persona_style == "minimalist":
+            sort_by = "product_display_name"
+            sort_order = "ASC"
+            logger.info("Minimalist persona → simple recommendations")
         else:
-            # Fallback to rule-based if no taste_embedding
-            logger.warning(f"⚠️ No taste_embedding field found for {user_id}")
-            logger.warning(f"   User exists in fashion_sota.users but taste_embedding is NULL")
-            logger.warning(f"   Falling back to rule-based recommendations based on preferences")
-            raise Exception("No taste_embedding - use fallback")
+            logger.info(f"Unknown persona '{persona_style}' → default recommendations")
+
+        # Get products with deterministic sorting
+        # Use a larger limit to get variety, then return top results
+        products_data = await repo.get_products(
+            limit=limit * 2,  # Get more candidates for diversity
+            offset=0,
+            filters=filters if filters else None,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+
+        # Take only the requested limit
+        products_data = products_data[:limit]
+
+        logger.info(f"✅ Returning {len(products_data)} deterministic recommendations")
 
     except Exception as e:
         logger.warning(f"⚠️ Vector Search failed, using rule-based fallback: {e}")
@@ -341,83 +302,48 @@ async def get_recommendations(
             filters=filters
         )
 
-    # Normalize preferred colors to Title Case for matching
-    preferred_colors = set(c.title() for c in persona["color_prefs"])
-    logger.info(f"Normalized color preferences: {preferred_colors}")
-    
-    filtered_products = []
+    # Convert to ProductDetail models with personalization reasons
+    products = []
+    preferred_colors = set(c.title() for c in persona.get("color_prefs", []))
 
     for p in products_data:
-        # Normalize product color to Title Case
-        product_color = (p["base_color"] or "").title()
-        color_match = product_color in preferred_colors
-        
-        # Check category match
-        category_match = p.get("master_category") in persona.get("preferred_categories", [])
-
         product = ProductDetail(**p)
-        # Pass product_id directly - get_image_url handles conversion
         product.image_url = get_image_url(product.product_id)
 
-        # Calculate hybrid score
-        vector_score = p.get("score", 0.5)  # From Vector Search or default
-        rule_score = 0.0
-        
-        # Category match bonus
-        if category_match:
-            rule_score += 0.3
-        
-        # Color match bonus
-        if color_match:
-            rule_score += 0.4
-        
-        # Price match bonus (only if we have valid price data in BOTH product and persona)
-        # Note: product_embeddings table doesn't have price, only products_lakebase does
-        if (p.get("price") is not None and
-            persona.get("avg_price") and
-            persona.get("min_price") and
-            persona.get("max_price")):
-            price_diff = abs(p["price"] - persona["avg_price"])
-            price_range = persona["max_price"] - persona["min_price"]
-            if price_range > 0:
-                price_score = 1 - (price_diff / price_range)
-                rule_score += 0.3 * max(0, price_score)
-        
-        # Hybrid score: 60% vector + 40% rules
-        if "score" in p:  # Has vector similarity
-            product.similarity_score = 0.6 * vector_score + 0.4 * rule_score
-        else:  # Rule-based only
-            product.similarity_score = rule_score
+        # Add deterministic similarity score (not ML-based)
+        # Score based on position in sorted list (first = highest score)
+        product.similarity_score = 1.0 - (len(products) * 0.01)  # Decreases slightly for each item
 
-        # Add personalization reasons
+        # Add personalization reasons based on persona
         reasons = []
-        if category_match:
+
+        # Category match
+        if p.get("master_category") in persona.get("preferred_categories", []):
             reasons.append(f"Matches your interest in {p['master_category']}")
-        if color_match:
+
+        # Color match
+        product_color = (p.get("base_color") or "").title()
+        if product_color in preferred_colors:
             reasons.append(f"Matches your preference for {product_color} items")
-        # Only check price range if product has price data
-        if (p.get("price") is not None and
-            persona.get("min_price") and
-            persona.get("max_price") and
-            persona["min_price"] <= p["price"] <= persona["max_price"]):
-            reasons.append(f"Within your typical price range (${persona['min_price']:.0f}-${persona['max_price']:.0f})")
-        if "score" in p and p["score"] > 0.8:
-            reasons.append("Similar to items you've liked before")
+
+        # Price-based reason (persona-specific)
+        if persona_style == "luxury" and p.get("price") and p["price"] > 2000:
+            reasons.append("Premium quality")
+        elif persona_style == "budget" and p.get("price") and p["price"] < 1000:
+            reasons.append("Great value")
+        elif persona_style == "trendy":
+            reasons.append("Latest style")
+        elif persona_style == "vintage":
+            reasons.append("Classic style")
 
         if reasons:
             product.personalization_reason = " • ".join(reasons)
+        else:
+            product.personalization_reason = f"Recommended for {persona_style} style"
 
-        filtered_products.append(product)
+        products.append(product)
 
-    # Sort by hybrid score and limit
-    filtered_products.sort(key=lambda x: x.similarity_score or 0, reverse=True)
-    products = filtered_products[:limit]
-    
-    if len(products) > 0:
-        avg_score = np.mean([p.similarity_score for p in products])
-        logger.info(f"Returning {len(products)} personalized recommendations (avg score: {avg_score:.2f})")
-    else:
-        logger.warning(f"Returning 0 recommendations for user {user_id}")
+    logger.info(f"Returning {len(products)} deterministic recommendations for {persona_style} persona")
 
     return SearchResponse(
         products=products,
