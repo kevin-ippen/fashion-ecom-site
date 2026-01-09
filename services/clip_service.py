@@ -149,8 +149,8 @@ class CLIPService:
                     result = await response.json()
 
             # Parse and normalize embedding
-            # clip-image-encoder returns: {"predictions": [0.01, 0.02, ...]} (flat array)
-            embedding = self._parse_embedding(result, is_nested=False)
+            # siglip-multimodal-endpoint returns: {"predictions": [{"embedding": [...]}]}
+            embedding = self._parse_embedding(result, is_nested=True)
             logger.info(f"✅ Generated image embedding: shape={embedding.shape}, norm={np.linalg.norm(embedding):.4f}")
 
             return embedding
