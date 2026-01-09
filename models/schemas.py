@@ -17,7 +17,7 @@ class Product(BaseModel):
     season: Optional[str] = None  # ✅ Now accepts NULL
     year: Optional[int] = None
     usage: Optional[str] = None
-    product_display_name: str  # Keep required - should always have a name
+    product_display_name: Optional[str] = None  # Can be NULL in database
     price: Optional[float] = None
     image_path: Optional[str] = None
     ingested_at: Optional[datetime] = None

@@ -64,7 +64,7 @@ def format_persona(user_data: dict) -> dict:
 
     # Generate a description from the user's preferences
     preferred_cats = user_data.get("preferred_categories", [])
-    avg_price = user_data.get("avg_price", 0)
+    avg_price = user_data.get("avg_price") or 0  # Handle NULL from database
 
     if preferred_cats and len(preferred_cats) > 0:
         cats_str = " and ".join(preferred_cats[:2])
@@ -96,12 +96,12 @@ def format_persona(user_data: dict) -> dict:
         "preferred_categories": preferred_cats,
         "color_prefs": color_prefs,
         "brand_prefs": brand_prefs,
-        "min_price": user_data.get("min_price", 0),
-        "max_price": user_data.get("max_price", 0),
+        "min_price": user_data.get("min_price") or 0,  # Handle NULL
+        "max_price": user_data.get("max_price") or 0,  # Handle NULL
         "avg_price": avg_price,
-        "p25_price": user_data.get("p25_price", 0),
-        "p75_price": user_data.get("p75_price", 0),
-        "num_interactions": user_data.get("num_interactions", 0),
+        "p25_price": user_data.get("p25_price") or 0,  # Handle NULL
+        "p75_price": user_data.get("p75_price") or 0,  # Handle NULL
+        "num_interactions": user_data.get("num_interactions") or 0,  # Handle NULL
         "purchase_history_ids": [],  # Not in schema, would need separate table
         "style_tags": []  # Could derive from style_profile if needed
     }
