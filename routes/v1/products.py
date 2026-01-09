@@ -108,22 +108,19 @@ async def list_products(
 
                 logger.info(f"User {user_id} has persona style: {persona_style}")
 
-                # Apply deterministic sorting based on persona
-                # Also apply user's preferred categories if available
+                # Note: user's preferred_categories contains sub_category values like "Outerwear", "Shoes"
+                # NOT master_category values. Don't filter by them - let persona logic handle filters.
                 preferred_cats = user.get("preferred_categories", [])
-                if preferred_cats and len(preferred_cats) > 0 and not master_category:
-                    # Add first preferred category to filters
-                    filters["master_category"] = preferred_cats[0]
-                    logger.info(f"Added preferred category filter: {preferred_cats[0]}")
+                logger.info(f"User preferred categories (for reference): {preferred_cats}")
 
-                # Determine sort strategy based on persona
+                # Determine sort strategy and filters based on persona
                 if persona_style == "luxury":
-                    # Luxury: Show expensive items first
+                    # Luxury: Show expensive items from all categories
                     sort_by = "price"
                     sort_order = "DESC"
                     logger.info("Luxury persona → sorting by price DESC")
                 elif persona_style == "budget":
-                    # Budget: Show cheap items first
+                    # Budget: Show affordable items from all categories
                     sort_by = "price"
                     sort_order = "ASC"
                     logger.info("Budget persona → sorting by price ASC")
@@ -133,31 +130,31 @@ async def list_products(
                     sort_order = "DESC"
                     logger.info("Trendy persona → sorting by product_id DESC (newest)")
                 elif persona_style == "vintage":
-                    # Vintage: Show older products (lowest IDs)
+                    # Vintage: Show classic/older products (lowest IDs)
                     sort_by = "product_id"
                     sort_order = "ASC"
                     logger.info("Vintage persona → sorting by product_id ASC (oldest)")
                 elif persona_style == "athletic":
-                    # Athletic: Filter to athletic categories, sort by name
+                    # Athletic: Focus on Apparel category
                     if not master_category and not sub_category:
                         filters["master_category"] = "Apparel"
                     sort_by = "product_display_name"
                     sort_order = "ASC"
                     logger.info("Athletic persona → filtering Apparel, sorting by name")
                 elif persona_style == "formal":
-                    # Formal: Filter to formal categories, sort by price DESC
+                    # Formal: Focus on Apparel category, premium items
                     if not master_category:
                         filters["master_category"] = "Apparel"
                     sort_by = "price"
                     sort_order = "DESC"
                     logger.info("Formal persona → filtering Apparel, sorting by price DESC")
                 elif persona_style == "casual":
-                    # Casual: Show comfortable items, sorted by name
+                    # Casual: Comfortable items from all categories
                     sort_by = "product_display_name"
                     sort_order = "ASC"
                     logger.info("Casual persona → sorting by name")
                 elif persona_style == "minimalist":
-                    # Minimalist: Show simple items, sorted by name
+                    # Minimalist: Simple items from all categories
                     sort_by = "product_display_name"
                     sort_order = "ASC"
                     logger.info("Minimalist persona → sorting by name")
