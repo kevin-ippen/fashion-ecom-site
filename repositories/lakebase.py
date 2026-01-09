@@ -117,11 +117,17 @@ class LakebaseRepository:
         params["limit"] = limit
         params["offset"] = offset
 
+        # Use RANDOM() for sort_by="RANDOM" to get true SQL-level randomization
+        if sort_by == "RANDOM":
+            order_clause = "ORDER BY RANDOM()"
+        else:
+            order_clause = f"ORDER BY {sort_by} {sort_order}"
+
         query = f"""
             SELECT *
             FROM {self.products_table}
             {where_clause}
-            ORDER BY {sort_by} {sort_order}
+            {order_clause}
             LIMIT :limit OFFSET :offset
         """
 

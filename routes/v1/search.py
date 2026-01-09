@@ -211,8 +211,8 @@ async def get_recommendations(
     logger.info(f"User {user_id} has persona style: {persona_style}")
 
     try:
-        # DETERMINISTIC RECOMMENDATIONS based on persona style
-        logger.info(f"🎯 Deterministic recommendations for user {user_id}")
+        # DETERMINISTIC RECOMMENDATIONS based on persona style with SQL RANDOM()
+        logger.info(f"🎯 Deterministic persona-based recommendations for user {user_id}")
 
         # Build filters for recommendations based on persona style
         # Note: user's preferred_categories contains sub_category values, not master_category
@@ -221,84 +221,44 @@ async def get_recommendations(
         preferred_cats = user.get("preferred_categories", [])
         logger.info(f"User preferred categories (for reference): {preferred_cats}")
 
-        # Determine sort strategy, filters, and keywords based on persona
+        # Simple approach: SQL RANDOM() for true randomization
+        # Only apply light persona-specific filters, no complex keywords
         if persona_style == "luxury":
-            # Luxury: Premium, designer, high-end items
-            filters["keywords"] = ["premium", "designer", "leather", "silk", "cashmere", "luxury", "suede", "velvet", "satin", "gold"]
-            sort_by = "price"
-            sort_order = "DESC"
-            logger.info("Luxury persona → premium keywords, sorting by price DESC")
+            # Luxury: Filter to expensive items only (>= median price)
+            filters["min_price"] = 1500
+            logger.info("Luxury persona → filtering price >= 1500, RANDOM order")
         elif persona_style == "budget":
-            # Budget: Basic, affordable, value items
-            filters["keywords"] = ["cotton", "basic", "casual", "jersey", "denim", "tee", "tank", "shorts", "leggings", "socks"]
-            sort_by = "price"
-            sort_order = "ASC"
-            logger.info("Budget persona → value keywords, sorting by price ASC")
-        elif persona_style == "trendy":
-            # Trendy: Modern, fashion-forward, stylish items
-            filters["keywords"] = ["crop", "oversized", "graphic", "printed", "pattern", "colorblock", "metallic", "mesh", "cutout", "asymmetric"]
-            sort_by = "product_id"
-            sort_order = "DESC"
-            logger.info("Trendy persona → fashion keywords, sorting by product_id DESC (newest)")
-        elif persona_style == "vintage":
-            # Vintage: Classic, retro, timeless items
-            filters["keywords"] = ["classic", "retro", "vintage", "denim", "flannel", "wool", "tweed", "corduroy", "plaid", "striped"]
-            sort_by = "product_id"
-            sort_order = "ASC"
-            logger.info("Vintage persona → classic keywords, sorting by product_id ASC (oldest)")
+            # Budget: Filter to affordable items only (<= median price)
+            filters["max_price"] = 1500
+            logger.info("Budget persona → filtering price <= 1500, RANDOM order")
         elif persona_style == "athletic":
-            # Athletic: Sport, active, performance items
-            filters["keywords"] = ["sports", "track", "running", "training", "gym", "active", "performance", "athletic", "yoga", "joggers"]
-            sort_by = "product_id"
-            sort_order = "ASC"
-            logger.info("Athletic persona → sports keywords, varied order")
+            # Athletic: Focus on Apparel only
+            if not filters.get("master_category"):
+                filters["master_category"] = "Apparel"
+            logger.info("Athletic persona → filtering Apparel, RANDOM order")
         elif persona_style == "formal":
-            # Formal: Business, professional, elegant items
-            filters["keywords"] = ["formal", "shirt", "blazer", "suit", "dress", "trousers", "oxford", "collar", "button", "elegant"]
-            sort_by = "price"
-            sort_order = "DESC"
-            logger.info("Formal persona → business keywords, sorting by price DESC")
-        elif persona_style == "casual":
-            # Casual: Comfortable, everyday, relaxed items
-            filters["keywords"] = ["tee", "jeans", "hoodie", "sweater", "sneakers", "casual", "comfort", "everyday", "relaxed", "sweatshirt"]
-            sort_by = "product_id"
-            sort_order = "ASC"
-            logger.info("Casual persona → comfort keywords, varied order")
-        elif persona_style == "minimalist":
-            # Minimalist: Simple, clean, essential items
-            filters["keywords"] = ["solid", "plain", "basic", "essential", "simple", "neutral", "black", "white", "grey", "beige"]
-            sort_by = "product_id"
-            sort_order = "DESC"
-            logger.info("Minimalist persona → simple keywords, varied order (reverse)")
+            # Formal: Focus on Apparel only
+            if not filters.get("master_category"):
+                filters["master_category"] = "Apparel"
+            logger.info("Formal persona → filtering Apparel, RANDOM order")
         else:
-            # Default: varied order, no keywords
-            sort_by = "product_id"
-            sort_order = "ASC"
-            logger.info(f"Unknown persona '{persona_style}' → default varied order recommendations")
+            # All other personas: no filters, just random
+            logger.info(f"{persona_style.title()} persona → no filters, RANDOM order")
 
-        # Get products with diversity: fetch more than needed and randomly sample
-        # This ensures variety across loads while still being persona-appropriate
-        import random
+        # Use SQL RANDOM() for true randomization at database level
+        sort_by = "RANDOM"
+        sort_order = ""  # Not used for RANDOM
 
-        # Fetch 4x the limit to get a diverse pool for recommendations
-        candidate_pool_size = limit * 4
-        products_pool = await repo.get_products(
-            limit=candidate_pool_size,
+        # Get products with SQL-level randomization
+        products_data = await repo.get_products(
+            limit=limit,
             offset=0,
             filters=filters if filters else None,
             sort_by=sort_by,
             sort_order=sort_order
         )
 
-        # Shuffle and sample from pool for variety
-        random.shuffle(products_pool)
-
-        if len(products_pool) > limit:
-            products_data = products_pool[:limit]
-            logger.info(f"✅ Returning {len(products_data)} recommendations from shuffled pool of {len(products_pool)}")
-        else:
-            products_data = products_pool
-            logger.info(f"✅ Returning all {len(products_data)} recommendations (pool smaller than limit)")
+        logger.info(f"✅ Returning {len(products_data)} truly randomized recommendations")
 
     except Exception as e:
         logger.warning(f"⚠️ Vector Search failed, using rule-based fallback: {e}")
