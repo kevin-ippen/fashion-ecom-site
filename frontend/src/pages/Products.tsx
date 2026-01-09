@@ -5,6 +5,10 @@ import { productsApi } from '@/api/client';
 import { ProductGrid } from '@/components/product/ProductGrid';
 import { ProductFilters } from '@/types';
 import { Button } from '@/components/ui/Button';
+import { ColorSwatches } from '@/components/filters/ColorSwatches';
+import { FilterPills } from '@/components/filters/FilterPills';
+import { PriceRangeSlider } from '@/components/filters/PriceRangeSlider';
+import { MobileFilterDrawer } from '@/components/filters/MobileFilterDrawer';
 
 export function Products() {
   const [page, setPage] = useState(1);
@@ -36,6 +40,15 @@ export function Products() {
     setPage(1);
   };
 
+  const removeFilter = (key: keyof ProductFilters) => {
+    setFilters((prev) => {
+      const updated = { ...prev };
+      delete updated[key];
+      return updated;
+    });
+    setPage(1);
+  };
+
   const activeFilterCount = Object.values(filters).filter((v) => v !== undefined).length;
 
   return (
@@ -61,12 +74,8 @@ export function Products() {
       </div>
 
       <div className="flex gap-8">
-        {/* Filters Sidebar */}
-        <aside
-          className={`${
-            showFilters ? 'block' : 'hidden'
-          } w-full flex-shrink-0 lg:block lg:w-64`}
-        >
+        {/* Filters Sidebar - Desktop only */}
+        <aside className="hidden w-64 flex-shrink-0 lg:block">
           <div className="sticky top-20 rounded-lg border bg-white p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">Filters</h2>
@@ -126,24 +135,14 @@ export function Products() {
                   </div>
                 )}
 
-              {/* Color Filter */}
+              {/* Color Filter - Visual Swatches */}
               {filterOptions?.colors && filterOptions.colors.length > 0 && (
                 <div>
-                  <label className="mb-2 block text-sm font-medium">Color</label>
-                  <select
-                    value={filters.base_color || ''}
-                    onChange={(e) =>
-                      handleFilterChange('base_color', e.target.value || undefined)
-                    }
-                    className="w-full rounded-md border px-3 py-2 text-sm"
-                  >
-                    <option value="">All</option>
-                    {filterOptions.colors.map((color) => (
-                      <option key={color} value={color}>
-                        {color}
-                      </option>
-                    ))}
-                  </select>
+                  <ColorSwatches
+                    colors={filterOptions.colors}
+                    selectedColor={filters.base_color}
+                    onColorSelect={(color) => handleFilterChange('base_color', color)}
+                  />
                 </div>
               )}
 
@@ -168,39 +167,23 @@ export function Products() {
                 </div>
               )}
 
-              {/* Price Range */}
+              {/* Price Range - Dual Slider */}
               {filterOptions?.price_range && (
                 <div>
-                  <label className="mb-2 block text-sm font-medium">Price Range</label>
-                  <div className="space-y-2">
-                    <input
-                      type="number"
-                      placeholder="Min"
-                      value={filters.min_price || ''}
-                      onChange={(e) =>
-                        handleFilterChange(
-                          'min_price',
-                          e.target.value ? Number(e.target.value) : undefined
-                        )
-                      }
-                      className="w-full rounded-md border px-3 py-2 text-sm"
-                    />
-                    <input
-                      type="number"
-                      placeholder="Max"
-                      value={filters.max_price || ''}
-                      onChange={(e) =>
-                        handleFilterChange(
-                          'max_price',
-                          e.target.value ? Number(e.target.value) : undefined
-                        )
-                      }
-                      className="w-full rounded-md border px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-gray-500">
-                    ${filterOptions.price_range.min} - ${filterOptions.price_range.max}
-                  </p>
+                  <PriceRangeSlider
+                    min={filterOptions.price_range.min}
+                    max={filterOptions.price_range.max}
+                    selectedMin={filters.min_price}
+                    selectedMax={filters.max_price}
+                    onRangeChange={(min, max) => {
+                      setFilters((prev) => ({
+                        ...prev,
+                        min_price: min,
+                        max_price: max,
+                      }));
+                      setPage(1);
+                    }}
+                  />
                 </div>
               )}
             </div>
@@ -209,6 +192,13 @@ export function Products() {
 
         {/* Products Grid */}
         <main className="flex-1">
+          {/* Active Filter Pills */}
+          <FilterPills
+            filters={filters}
+            onRemoveFilter={removeFilter}
+            onClearAll={clearFilters}
+          />
+
           <ProductGrid products={data?.products || []} isLoading={isLoading} />
 
           {/* Pagination */}
@@ -235,6 +225,126 @@ export function Products() {
           )}
         </main>
       </div>
+
+      {/* Mobile Filter Drawer */}
+      <MobileFilterDrawer
+        isOpen={showFilters}
+        onClose={() => setShowFilters(false)}
+        onApply={() => {}}
+        filterCount={activeFilterCount}
+        resultCount={data?.total || 0}
+      >
+        <div className="space-y-6">
+          {/* Gender Filter */}
+          {filterOptions?.genders && filterOptions.genders.length > 0 && (
+            <div>
+              <label className="mb-2 block text-sm font-medium">Gender</label>
+              <select
+                value={filters.gender || ''}
+                onChange={(e) =>
+                  handleFilterChange('gender', e.target.value || undefined)
+                }
+                className="w-full rounded-md border px-3 py-2 text-sm"
+              >
+                <option value="">All</option>
+                {filterOptions.genders.map((gender) => (
+                  <option key={gender} value={gender}>
+                    {gender}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Category Filter */}
+          {filterOptions?.master_categories &&
+            filterOptions.master_categories.length > 0 && (
+              <div>
+                <label className="mb-2 block text-sm font-medium">Category</label>
+                <select
+                  value={filters.master_category || ''}
+                  onChange={(e) =>
+                    handleFilterChange('master_category', e.target.value || undefined)
+                  }
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                >
+                  <option value="">All</option>
+                  {filterOptions.master_categories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+          {/* Color Filter - Visual Swatches */}
+          {filterOptions?.colors && filterOptions.colors.length > 0 && (
+            <div>
+              <ColorSwatches
+                colors={filterOptions.colors}
+                selectedColor={filters.base_color}
+                onColorSelect={(color) => handleFilterChange('base_color', color)}
+              />
+            </div>
+          )}
+
+          {/* Season Filter */}
+          {filterOptions?.seasons && filterOptions.seasons.length > 0 && (
+            <div>
+              <label className="mb-2 block text-sm font-medium">Season</label>
+              <select
+                value={filters.season || ''}
+                onChange={(e) =>
+                  handleFilterChange('season', e.target.value || undefined)
+                }
+                className="w-full rounded-md border px-3 py-2 text-sm"
+              >
+                <option value="">All</option>
+                {filterOptions.seasons.map((season) => (
+                  <option key={season} value={season}>
+                    {season}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Price Range - Dual Slider */}
+          {filterOptions?.price_range && (
+            <div>
+              <PriceRangeSlider
+                min={filterOptions.price_range.min}
+                max={filterOptions.price_range.max}
+                selectedMin={filters.min_price}
+                selectedMax={filters.max_price}
+                onRangeChange={(min, max) => {
+                  setFilters((prev) => ({
+                    ...prev,
+                    min_price: min,
+                    max_price: max,
+                  }));
+                  setPage(1);
+                }}
+              />
+            </div>
+          )}
+
+          {/* Clear All Button */}
+          {activeFilterCount > 0 && (
+            <div className="pt-4">
+              <Button
+                variant="ghost"
+                size="lg"
+                onClick={clearFilters}
+                className="w-full"
+              >
+                Clear All Filters
+              </Button>
+            </div>
+          )}
+        </div>
+      </MobileFilterDrawer>
     </div>
   );
 }

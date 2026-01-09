@@ -219,6 +219,68 @@ class OutfitCompatibilityService:
         # Casual is versatile
         return True
 
+    def is_gender_compatible(
+        self,
+        source_product: Dict[str, Any],
+        rec_product: Dict[str, Any]
+    ) -> bool:
+        """
+        Check if two products are gender-compatible for outfit pairing
+
+        Rules:
+        - Men's items → Men's or Unisex only
+        - Women's items → Women's or Unisex only
+        - Boys items → Boys only (no mixing with Girls or adults)
+        - Girls items → Girls only (no mixing with Boys or adults)
+        - Unisex items → Can pair with any adult gender (but not kids)
+        - NO adult (Men/Women) ↔ kids (Boys/Girls) mixing
+
+        Args:
+            source_product: Source product dict
+            rec_product: Recommended product dict
+
+        Returns:
+            True if gender-compatible, False otherwise
+        """
+        source_gender = source_product.get("gender", "")
+        rec_gender = rec_product.get("gender", "")
+
+        # Define adult vs kids categories
+        adult_genders = {"Men", "Women", "Unisex"}
+        kids_genders = {"Boys", "Girls"}
+
+        # Determine age categories
+        source_is_adult = source_gender in adult_genders
+        source_is_kids = source_gender in kids_genders
+        rec_is_adult = rec_gender in adult_genders
+        rec_is_kids = rec_gender in kids_genders
+
+        # NEVER MATCH: Adult with kids
+        if (source_is_adult and rec_is_kids) or (source_is_kids and rec_is_adult):
+            logger.debug(f"❌ Age mismatch: {source_gender} + {rec_gender} (adult/kids)")
+            return False
+
+        # Unisex works with any adult gender (but not kids, handled above)
+        if source_gender == "Unisex" or rec_gender == "Unisex":
+            return True
+
+        # Same gender always works
+        if source_gender == rec_gender:
+            return True
+
+        # Men and Women don't mix (unless Unisex involved, handled above)
+        if source_gender in {"Men", "Women"} and rec_gender in {"Men", "Women"}:
+            logger.debug(f"❌ Gender mismatch: {source_gender} + {rec_gender}")
+            return False
+
+        # Boys and Girls don't mix
+        if source_gender in {"Boys", "Girls"} and rec_gender in {"Boys", "Girls"}:
+            logger.debug(f"❌ Kids gender mismatch: {source_gender} + {rec_gender}")
+            return False
+
+        # Default: allow
+        return True
+
     def is_category_compatible(
         self,
         source_product: Dict[str, Any],
@@ -247,6 +309,10 @@ class OutfitCompatibilityService:
             return False
         if rec_cat in {"innerwear", "sleepwear", "swimwear"}:
             logger.debug(f"❌ Recommendation is isolated category: {rec_cat}")
+            return False
+
+        # NEVER MATCH: Gender/age incompatibility
+        if not self.is_gender_compatible(source_product, rec_product):
             return False
 
         # NEVER MATCH: Same category duplicates (except outerwear layering)
@@ -493,6 +559,10 @@ class OutfitCompatibilityService:
         if source_cat in {"innerwear", "sleepwear", "swimwear"}:
             return False
         if rec_cat in {"innerwear", "sleepwear", "swimwear"}:
+            return False
+
+        # NEVER MATCH: Gender/age incompatibility (always enforce)
+        if not self.is_gender_compatible(source_product, rec_product):
             return False
 
         # NEVER MATCH: Same category duplicates (always enforce, except outerwear layering)

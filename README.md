@@ -2,6 +2,8 @@
 
 A modern ecommerce storefront experience with AI-powered visual search and personalized recommendations, built on Databricks.
 
+> **✨ Codebase Recently Cleaned**: 48 legacy files archived + notebooks reorganized on 2026-01-08 for better organization. See [CLEANUP_SUMMARY.md](CLEANUP_SUMMARY.md) and [NOTEBOOKS_REORGANIZATION.md](NOTEBOOKS_REORGANIZATION.md) for details. No functionality was removed.
+
 ## Quick Links
 
 📄 **[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)** - Architecture, current status, and key milestones

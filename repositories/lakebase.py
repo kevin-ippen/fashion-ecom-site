@@ -23,8 +23,9 @@ class LakebaseRepository:
         self.schema = settings.LAKEBASE_SCHEMA  # fashion_sota
         self.products_table = f"{self.schema}.{settings.LAKEBASE_PRODUCTS_TABLE}"  # fashion_sota.products_lakebase
         self.embeddings_table = f"{self.schema}.product_embeddings"  # fashion_sota.product_embeddings (if synced)
-        self.users_table = f"{self.schema}.{settings.LAKEBASE_USERS_TABLE}"  # fashion_sota.users
-        self.user_features_table = f"{self.schema}.{settings.LAKEBASE_USER_FEATURES_TABLE}"  # fashion_sota.user_preferences
+        # TEMP: Users are still in fashion_demo schema until migrated
+        self.users_table = f"fashion_demo.{settings.LAKEBASE_USERS_TABLE}"  # fashion_demo.usersdb
+        self.user_features_table = f"fashion_demo.{settings.LAKEBASE_USER_FEATURES_TABLE}"  # fashion_demo.user_style_featuresdb
 
     def _get_base_product_filter(self) -> str:
         """
@@ -34,16 +35,16 @@ class LakebaseRepository:
         - Innerwear (underwear, bras, intimates)
         - Loungewear and Nightwear (sleepwear, pajamas)
         - Swimwear
-        - Saris/Sarees
+        - Saris/Sarees (both singular and plural)
+        - Free gifts and personal care items
 
         Only includes:
         - Apparel, Accessories, Footwear
         """
         return """
             master_category IN ('Apparel', 'Accessories', 'Footwear')
-            AND sub_category NOT IN ('Innerwear', 'Loungewear and Nightwear')
-            AND article_type != 'Swimwear'
-            AND article_type != 'Saree'
+            AND sub_category NOT IN ('Innerwear', 'Loungewear and Nightwear', 'Saree', 'Free Gifts', 'Fragrance', 'Skin Care')
+            AND article_type NOT IN ('Swimwear', 'Saree', 'Sarees', 'Free Gifts', 'Perfume and Body Mist', 'Mens Grooming Kit')
         """
 
     async def _execute_query(self, query: str, params: Optional[Dict] = None) -> List[Dict[str, Any]]:

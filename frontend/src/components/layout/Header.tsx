@@ -3,13 +3,29 @@ import { ShoppingCart, User, Search, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useCartStore } from '@/stores/cartStore';
 import { usePersonaStore } from '@/stores/personaStore';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PersonaSelector } from '@/components/user/PersonaSelector';
+import { CartDrawer } from '@/components/cart/CartDrawer';
+import { SmartSearch } from '@/components/search/SmartSearch';
 
 export function Header() {
   const [showPersonaSelector, setShowPersonaSelector] = useState(false);
+  const [showCartDrawer, setShowCartDrawer] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
   const itemCount = useCartStore((state) => state.item_count);
   const selectedPersona = usePersonaStore((state) => state.selectedPersona);
+
+  // Track scroll position for compact header
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
     <>
@@ -22,10 +38,10 @@ export function Header() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-50 w-full border-b border-stone-200 bg-white/95 backdrop-blur-md">
+      <header className={`sticky top-0 z-50 w-full border-b border-stone-200 bg-white/95 backdrop-blur-md transition-all duration-300 ${isScrolled ? 'shadow-md' : ''}`}>
         {/* Main navigation */}
         <div className="container mx-auto px-4">
-          <div className="flex h-20 items-center justify-between">
+          <div className={`flex items-center justify-between transition-all duration-300 ${isScrolled ? 'h-16' : 'h-20'}`}>
             {/* Logo - Refined serif */}
             <Link to="/" className="flex-shrink-0">
               <h1 className="font-serif text-3xl font-semibold tracking-tight text-stone-900">
@@ -64,11 +80,14 @@ export function Header() {
             {/* Actions - Right aligned */}
             <div className="flex items-center gap-3">
               {/* Search - Desktop */}
-              <Link to="/search" className="hidden md:block">
-                <Button variant="ghost" size="sm">
-                  <Search className="h-5 w-5" />
-                </Button>
-              </Link>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hidden md:flex"
+                onClick={() => setShowSearch(true)}
+              >
+                <Search className="h-5 w-5" />
+              </Button>
 
               {/* Persona selector */}
               <Button
@@ -89,16 +108,19 @@ export function Header() {
               </Button>
 
               {/* Cart */}
-              <Link to="/cart">
-                <Button variant="ghost" size="sm" className="relative">
-                  <ShoppingCart className="h-5 w-5" />
-                  {itemCount > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-[10px] font-medium text-white">
-                      {itemCount}
-                    </span>
-                  )}
-                </Button>
-              </Link>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="relative"
+                onClick={() => setShowCartDrawer(true)}
+              >
+                <ShoppingCart className="h-5 w-5" />
+                {itemCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-[10px] font-medium text-white animate-bounce-subtle">
+                    {itemCount}
+                  </span>
+                )}
+              </Button>
             </div>
           </div>
         </div>
@@ -142,6 +164,18 @@ export function Header() {
       {showPersonaSelector && (
         <PersonaSelector onClose={() => setShowPersonaSelector(false)} />
       )}
+
+      {/* Cart Drawer */}
+      <CartDrawer
+        isOpen={showCartDrawer}
+        onClose={() => setShowCartDrawer(false)}
+      />
+
+      {/* Smart Search Modal */}
+      <SmartSearch
+        isOpen={showSearch}
+        onClose={() => setShowSearch(false)}
+      />
     </>
   );
 }

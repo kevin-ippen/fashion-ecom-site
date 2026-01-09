@@ -1,11 +1,9 @@
 """
-User and persona API routes
+User and persona API routes - now fetches real users from database
 """
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
-import json
-import os
 from models.schemas import User, UserProfile, ProductDetail
 from repositories.lakebase import LakebaseRepository
 from core.database import get_async_db
@@ -36,33 +34,112 @@ def get_image_url(product_id) -> str:
     return f"{WORKSPACE_HOST}/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/{pid}.jpg"
 
 
-def load_personas():
-    """Load persona data from JSON file"""
-    personas_path = os.path.join(os.path.dirname(__file__), "../../data/personas.json")
-    with open(personas_path, "r") as f:
-        data = json.load(f)
-    return data["personas"]
+def format_persona(user_data: dict) -> dict:
+    """
+    Transform database user record into persona format expected by frontend
+
+    Database columns expected:
+    - user_id: str
+    - segment: str (e.g., "budget", "luxury", "trendy")
+    - avg_price_point: float
+    - preferred_categories: list/array
+    - color_prefs: list/array
+    - brand_prefs: list/array
+    - min_price: float
+    - max_price: float
+    - avg_price: float
+    - p25_price: float
+    - p75_price: float
+    - num_interactions: int
+    - style_tags: list/array
+    """
+    # Generate a display name from the segment
+    segment = user_data.get("segment", "Shopper")
+    segment_names = {
+        "budget": "Budget-Conscious Shopper",
+        "luxury": "Luxury Fashion Enthusiast",
+        "trendy": "Trend-Following Shopper",
+        "minimalist": "Minimalist Style Enthusiast",
+        "vintage": "Vintage Style Enthusiast",
+        "athleisure": "Athleisure Advocate",
+        "formal": "Formal Wear Professional",
+        "casual": "Casual Style Lover"
+    }
+    name = segment_names.get(segment.lower(), f"{segment.title()} Shopper")
+
+    # Generate a description from the user's preferences
+    preferred_cats = user_data.get("preferred_categories", [])
+    avg_price = user_data.get("avg_price_point", user_data.get("avg_price", 0))
+
+    if preferred_cats and len(preferred_cats) > 0:
+        cats_str = " and ".join(preferred_cats[:2])
+        description = f"Prefers {cats_str} with an average spend of ${avg_price:.2f}"
+    else:
+        description = f"Fashion enthusiast with an average spend of ${avg_price:.2f}"
+
+    return {
+        "user_id": user_data.get("user_id"),
+        "name": name,
+        "description": description,
+        "segment": segment,
+        "avg_price_point": avg_price,
+        "preferred_categories": user_data.get("preferred_categories", []),
+        "color_prefs": user_data.get("color_prefs", []),
+        "brand_prefs": user_data.get("brand_prefs", []),
+        "min_price": user_data.get("min_price", 0),
+        "max_price": user_data.get("max_price", 0),
+        "avg_price": user_data.get("avg_price", avg_price),
+        "p25_price": user_data.get("p25_price", 0),
+        "p75_price": user_data.get("p75_price", 0),
+        "num_interactions": user_data.get("num_interactions", 0),
+        "purchase_history_ids": user_data.get("purchase_history_ids", []),
+        "style_tags": user_data.get("style_tags", [])
+    }
 
 
 @router.get("", response_model=List[dict])
-async def list_personas():
+async def list_personas(
+    limit: int = 10,
+    db: AsyncSession = Depends(get_async_db)
+):
     """
-    Get all available user personas for demo
+    Get user personas from database
+
+    Returns a list of real users with their style preferences and shopping behavior.
     """
-    personas = load_personas()
+    repo = LakebaseRepository(db)
+
+    # Get users from database
+    users = await repo.get_users()
+
+    # Limit results
+    if limit:
+        users = users[:limit]
+
+    # Format each user as a persona
+    personas = [format_persona(user) for user in users]
+
     return personas
 
 
 @router.get("/{user_id}", response_model=dict)
-async def get_persona(user_id: str):
+async def get_persona(
+    user_id: str,
+    db: AsyncSession = Depends(get_async_db)
+):
     """
-    Get a specific user persona by ID
+    Get a specific user persona by ID from database
     """
-    personas = load_personas()
-    persona = next((p for p in personas if p["user_id"] == user_id), None)
+    repo = LakebaseRepository(db)
 
-    if not persona:
+    # Get user from database
+    user = await repo.get_user_by_id(user_id)
+
+    if not user:
         raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+    # Format as persona
+    persona = format_persona(user)
 
     return persona
 
@@ -73,23 +150,23 @@ async def get_user_profile(
     db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Get detailed user profile including purchase history
+    Get detailed user profile including purchase history from database
     """
     repo = LakebaseRepository(db)
 
-    # Load persona data
-    personas = load_personas()
-    persona = next((p for p in personas if p["user_id"] == user_id), None)
+    # Get user from database
+    user = await repo.get_user_by_id(user_id)
 
-    if not persona:
+    if not user:
         raise HTTPException(status_code=404, detail=f"User {user_id} not found")
 
     # Get some random products as "purchase history"
     # Filter by user preferences to make it realistic
     filters = {}
-    if persona.get("preferred_categories"):
+    preferred_cats = user.get("preferred_categories", [])
+    if preferred_cats and len(preferred_cats) > 0:
         # Pick the first preferred category
-        filters["master_category"] = persona["preferred_categories"][0]
+        filters["master_category"] = preferred_cats[0]
 
     products_data = await repo.get_products(
         limit=8,
@@ -106,17 +183,17 @@ async def get_user_profile(
 
     # Build profile
     profile = UserProfile(
-        user_id=persona["user_id"],
-        segment=persona["segment"],
-        avg_price_point=persona["avg_price_point"],
-        preferred_categories=persona["preferred_categories"],
-        color_prefs=persona["color_prefs"],
+        user_id=user["user_id"],
+        segment=user.get("segment", "Shopper"),
+        avg_price_point=user.get("avg_price_point", user.get("avg_price", 0)),
+        preferred_categories=user.get("preferred_categories", []),
+        color_prefs=user.get("color_prefs", []),
         price_range={
-            "min": persona["min_price"],
-            "max": persona["max_price"],
-            "avg": persona["avg_price"]
+            "min": user.get("min_price", 0),
+            "max": user.get("max_price", 0),
+            "avg": user.get("avg_price", user.get("avg_price_point", 0))
         },
-        num_interactions=persona["num_interactions"],
+        num_interactions=user.get("num_interactions", 0),
         purchase_history=purchase_history
     )
 

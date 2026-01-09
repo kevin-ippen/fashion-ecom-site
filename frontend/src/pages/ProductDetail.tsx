@@ -1,16 +1,20 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ShoppingCart, Heart, Package, Truck, Shield } from 'lucide-react';
+import { ShoppingCart, Heart, Package, Truck, Shield } from 'lucide-react';
 import { productsApi } from '@/api/client';
 import { useCartStore } from '@/stores/cartStore';
 import { Button } from '@/components/ui/Button';
 import { ProductGrid } from '@/components/product/ProductGrid';
+import { Breadcrumb } from '@/components/ui/Breadcrumb';
+import { SizeSelector } from '@/components/product/SizeSelector';
+import { Accordion } from '@/components/ui/Accordion';
 import { formatPrice } from '@/lib/utils';
 import { useState } from 'react';
 
 export function ProductDetail() {
   const { productId } = useParams<{ productId: string }>();
   const [quantity, setQuantity] = useState(1);
+  const [selectedSize, setSelectedSize] = useState<string>();
   const addItem = useCartStore((state) => state.addItem);
 
   // Fetch product details
@@ -75,17 +79,19 @@ export function ProductDetail() {
     );
   }
 
+  // Build breadcrumb items
+  const breadcrumbItems = [
+    { label: product.gender, href: `/products?gender=${product.gender}` },
+    { label: product.master_category, href: `/products?master_category=${product.master_category}` },
+    { label: product.sub_category, href: `/products?sub_category=${product.sub_category}` },
+    { label: product.product_display_name }, // Current product, no href
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
-        {/* Back button */}
-        <Link
-          to="/products"
-          className="mb-6 inline-flex items-center text-sm text-gray-600 hover:text-gray-900"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to products
-        </Link>
+        {/* Breadcrumb navigation */}
+        <Breadcrumb items={breadcrumbItems} className="mb-6" />
 
         {/* Product details */}
         <div className="grid gap-8 lg:grid-cols-2">
@@ -116,40 +122,23 @@ export function ProductDetail() {
               <p className="text-4xl font-bold text-gray-900">{formatPrice(product.price)}</p>
             </div>
 
-            {/* Product details */}
-            <div className="space-y-3">
-              <h3 className="font-semibold text-gray-900">Product Details</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-500">Category</p>
-                  <p className="font-medium">{product.master_category}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Type</p>
-                  <p className="font-medium">{product.article_type}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Color</p>
-                  <p className="font-medium">{product.base_color}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Season</p>
-                  <p className="font-medium">{product.season}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Gender</p>
-                  <p className="font-medium">{product.gender}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Usage</p>
-                  <p className="font-medium">{product.usage}</p>
-                </div>
-              </div>
+            {/* Color */}
+            <div>
+              <p className="text-body-sm text-muted-foreground mb-1">Color</p>
+              <p className="text-body font-medium">{product.base_color}</p>
             </div>
 
+            {/* Size Selector */}
+            <SizeSelector
+              sizes={['XS', 'S', 'M', 'L', 'XL']}
+              selectedSize={selectedSize}
+              onSizeSelect={setSelectedSize}
+              unavailableSizes={['XS']} // Demo: XS is out of stock
+            />
+
             {/* Quantity selector */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Quantity</label>
+            <div className="space-y-2">
+              <label className="block text-body font-medium text-foreground">Quantity</label>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -180,21 +169,82 @@ export function ProductDetail() {
               </Button>
             </div>
 
-            {/* Features */}
-            <div className="space-y-3 border-t pt-6">
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <Truck className="h-5 w-5" />
+            {/* Trust Badges */}
+            <div className="space-y-2 rounded-lg bg-accent/30 p-4">
+              <div className="flex items-center gap-3 text-body-sm text-foreground">
+                <Truck className="h-5 w-5 text-primary" />
                 <span>Free shipping on orders over $50</span>
               </div>
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <Package className="h-5 w-5" />
-                <span>Easy returns within 30 days</span>
+              <div className="flex items-center gap-3 text-body-sm text-foreground">
+                <Package className="h-5 w-5 text-primary" />
+                <span>Free 30-day returns</span>
               </div>
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <Shield className="h-5 w-5" />
-                <span>1 year warranty</span>
+              <div className="flex items-center gap-3 text-body-sm text-foreground">
+                <Shield className="h-5 w-5 text-primary" />
+                <span>Secure checkout</span>
               </div>
             </div>
+
+            {/* Expandable Product Details */}
+            <Accordion
+              items={[
+                {
+                  title: 'Product Details',
+                  defaultOpen: true,
+                  content: (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                      <div>
+                        <p className="font-medium text-foreground">Category</p>
+                        <p>{product.master_category}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">Type</p>
+                        <p>{product.article_type}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">Gender</p>
+                        <p>{product.gender}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">Season</p>
+                        <p>{product.season}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">Usage</p>
+                        <p>{product.usage}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">Year</p>
+                        <p>{product.year}</p>
+                      </div>
+                    </div>
+                  ),
+                },
+                {
+                  title: 'Shipping & Returns',
+                  content: (
+                    <div className="space-y-3">
+                      <p>Free standard shipping on orders over $50.</p>
+                      <p>Orders ship within 1-2 business days.</p>
+                      <p>
+                        Returns accepted within 30 days of purchase. Items must be unworn
+                        with tags attached.
+                      </p>
+                    </div>
+                  ),
+                },
+                {
+                  title: 'Size & Fit',
+                  content: (
+                    <div className="space-y-3">
+                      <p>Model is 5'9" and wearing size S.</p>
+                      <p>Fits true to size. Take your normal size.</p>
+                      <p>Designed for a relaxed fit.</p>
+                    </div>
+                  ),
+                },
+              ]}
+            />
           </div>
         </div>
 
