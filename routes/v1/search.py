@@ -290,29 +290,15 @@ async def get_recommendations(
             sort_order=sort_order
         )
 
-        # Apply category diversity: max 3 products per master_category
-        # This prevents "whole page of shoes" scenarios
-        from collections import defaultdict
-
-        category_counts = defaultdict(int)
-        diversified_products = []
-        max_per_category = 3
-
-        # Shuffle pool for randomness, then iterate and limit per category
+        # Shuffle and sample from pool for variety
         random.shuffle(products_pool)
 
-        for product in products_pool:
-            category = product.get("master_category", "Unknown")
-            if category_counts[category] < max_per_category:
-                diversified_products.append(product)
-                category_counts[category] += 1
-
-                if len(diversified_products) >= limit:
-                    break
-
-        products_data = diversified_products
-        logger.info(f"✅ Category-diversified recommendations: {len(products_data)} products from pool of {len(products_pool)}")
-        logger.info(f"   Category distribution: {dict(category_counts)}")
+        if len(products_pool) > limit:
+            products_data = products_pool[:limit]
+            logger.info(f"✅ Returning {len(products_data)} recommendations from shuffled pool of {len(products_pool)}")
+        else:
+            products_data = products_pool
+            logger.info(f"✅ Returning all {len(products_data)} recommendations (pool smaller than limit)")
 
     except Exception as e:
         logger.warning(f"⚠️ Vector Search failed, using rule-based fallback: {e}")
