@@ -328,8 +328,12 @@ async def get_recommendations(
         if color_match:
             rule_score += 0.4
         
-        # Price match bonus (only if we have valid price data)
-        if persona.get("avg_price") and persona.get("min_price") and persona.get("max_price"):
+        # Price match bonus (only if we have valid price data in BOTH product and persona)
+        # Note: product_embeddings table doesn't have price, only products_lakebase does
+        if (p.get("price") is not None and
+            persona.get("avg_price") and
+            persona.get("min_price") and
+            persona.get("max_price")):
             price_diff = abs(p["price"] - persona["avg_price"])
             price_range = persona["max_price"] - persona["min_price"]
             if price_range > 0:
@@ -348,7 +352,11 @@ async def get_recommendations(
             reasons.append(f"Matches your interest in {p['master_category']}")
         if color_match:
             reasons.append(f"Matches your preference for {product_color} items")
-        if persona.get("min_price") and persona.get("max_price") and persona["min_price"] <= p["price"] <= persona["max_price"]:
+        # Only check price range if product has price data
+        if (p.get("price") is not None and
+            persona.get("min_price") and
+            persona.get("max_price") and
+            persona["min_price"] <= p["price"] <= persona["max_price"]):
             reasons.append(f"Within your typical price range (${persona['min_price']:.0f}-${persona['max_price']:.0f})")
         if "score" in p and p["score"] > 0.8:
             reasons.append("Similar to items you've liked before")
