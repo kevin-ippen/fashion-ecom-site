@@ -5,18 +5,4 @@ resources:
     # Grant app service principal READ access to UC volumes for image serving
     - securable_type: VOLUME
       securable_full_name: main.fashion_sota.product_images
-      permission: READ_VOLUME
-
-    # Grant USAGE on schema for Lakebase access
-    - securable_type: SCHEMA
-      securable_full_name: main.fashion_sota
-      permission: USAGE
-
-    # Grant SELECT on Lakebase tables
-    - securable_type: TABLE
-      securable_full_name: main.fashion_sota.products_lakebase
-      permission: SELECT
-
-    - securable_type: TABLE
-      securable_full_name: main.fashion_sota.users_lakebase
-      permission: SELECT
+      privilege: READ_VOLUME
