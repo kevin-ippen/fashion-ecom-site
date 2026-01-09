@@ -14,6 +14,19 @@ router = APIRouter(prefix="/users", tags=["users"])
 # Get workspace host for constructing Files API URLs
 WORKSPACE_HOST = settings.DATABRICKS_WORKSPACE_URL
 
+# Curated personas with rich data and complete embeddings
+# These users have the most complete taste profiles and shopping history
+CURATED_PERSONA_IDS = {
+    "athletic": "user_001239",
+    "budget": "user_008711",
+    "casual": "user_001249",
+    "formal": "user_001274",
+    "luxury": "user_001273",
+    "minimalist": "user_001232",
+    "trendy": "user_001305",
+    "vintage": "user_001289"
+}
+
 
 def get_image_url(product_id) -> str:
     """
@@ -51,14 +64,21 @@ def format_persona(user_data: dict) -> dict:
     # Generate a display name from the style_profile
     style_profile = user_data.get("style_profile", "Shopper")
     segment_names = {
+        "athletic": "Athletic Style Enthusiast",
+        "budget": "Budget-Conscious Shopper",
+        "casual": "Casual Style Lover",
+        "formal": "Formal Wear Professional",
+        "luxury": "Luxury Fashion Enthusiast",
+        "minimalist": "Minimalist Style Enthusiast",
+        "trendy": "Trendsetter",
+        "vintage": "Vintage Style Enthusiast",
+        # Legacy mappings
         "budget_conscious": "Budget-Conscious Shopper",
         "luxury_seeker": "Luxury Fashion Enthusiast",
-        "trendsetter": "Trend-Following Shopper",
-        "minimalist": "Minimalist Style Enthusiast",
+        "trendsetter": "Trendsetter",
         "vintage_lover": "Vintage Style Enthusiast",
-        "athleisure": "Athleisure Advocate",
-        "professional": "Formal Wear Professional",
-        "casual": "Casual Style Lover"
+        "athleisure": "Athletic Style Enthusiast",
+        "professional": "Formal Wear Professional"
     }
     name = segment_names.get(style_profile.lower() if style_profile else "", f"{style_profile.title() if style_profile else 'Fashion'} Shopper")
 
@@ -109,25 +129,34 @@ def format_persona(user_data: dict) -> dict:
 
 @router.get("", response_model=List[dict])
 async def list_personas(
-    limit: int = 10,
+    curated: bool = True,
     db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get user personas from database
 
+    Args:
+        curated: If True, return only curated personas with rich embeddings (default)
+                 If False, return all users (for admin/testing)
+
     Returns a list of real users with their style preferences and shopping behavior.
     """
     repo = LakebaseRepository(db)
 
-    # Get users from database
-    users = await repo.get_users()
+    if curated:
+        # Get only curated personas - one per style profile
+        personas = []
+        for style_profile, user_id in CURATED_PERSONA_IDS.items():
+            user = await repo.get_user_by_id(user_id)
+            if user:
+                personas.append(format_persona(user))
 
-    # Limit results
-    if limit:
-        users = users[:limit]
-
-    # Format each user as a persona
-    personas = [format_persona(user) for user in users]
+        # Sort by style profile for consistent ordering
+        personas.sort(key=lambda p: p["segment"])
+    else:
+        # Get all users (for admin/testing)
+        users = await repo.get_users()
+        personas = [format_persona(user) for user in users[:20]]  # Limit to 20
 
     return personas
 
