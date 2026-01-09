@@ -214,53 +214,56 @@ async def get_recommendations(
         # DETERMINISTIC RECOMMENDATIONS based on persona style
         logger.info(f"🎯 Deterministic recommendations for user {user_id}")
 
-        # Build filters for recommendations - ALWAYS apply user's preferred categories
+        # Build filters for recommendations based on persona style
+        # Note: user's preferred_categories contains sub_category values, not master_category
+        # Let persona logic determine appropriate filters
         filters = {}
         preferred_cats = user.get("preferred_categories", [])
+        logger.info(f"User preferred categories (for reference): {preferred_cats}")
 
-        # For recommendations, ALWAYS filter to user's preferences (more focused than product listing)
-        if preferred_cats and len(preferred_cats) > 0:
-            # Use first preferred category
-            filters["master_category"] = preferred_cats[0]
-            logger.info(f"Filtering recommendations to category: {preferred_cats[0]}")
-
-        # Determine sort strategy based on persona (same logic as product listing)
+        # Determine sort strategy and filters based on persona
         sort_by = "product_display_name"  # Default
         sort_order = "ASC"
 
         if persona_style == "luxury":
+            # Luxury: Show expensive items from all categories
             sort_by = "price"
             sort_order = "DESC"
             logger.info("Luxury persona → expensive recommendations first")
         elif persona_style == "budget":
+            # Budget: Show affordable items from all categories
             sort_by = "price"
             sort_order = "ASC"
             logger.info("Budget persona → affordable recommendations first")
         elif persona_style == "trendy":
+            # Trendy: Show newest products
             sort_by = "product_id"
             sort_order = "DESC"
             logger.info("Trendy persona → newest recommendations first")
         elif persona_style == "vintage":
+            # Vintage: Show classic/older products
             sort_by = "product_id"
             sort_order = "ASC"
             logger.info("Vintage persona → classic recommendations first")
         elif persona_style == "athletic":
-            if not filters.get("master_category"):
-                filters["master_category"] = "Apparel"
+            # Athletic: Focus on Apparel
+            filters["master_category"] = "Apparel"
             sort_by = "product_display_name"
             sort_order = "ASC"
             logger.info("Athletic persona → Apparel recommendations")
         elif persona_style == "formal":
-            if not filters.get("master_category"):
-                filters["master_category"] = "Apparel"
+            # Formal: Focus on Apparel, premium items
+            filters["master_category"] = "Apparel"
             sort_by = "price"
             sort_order = "DESC"
             logger.info("Formal persona → premium Apparel recommendations")
         elif persona_style == "casual":
+            # Casual: Comfortable items, all categories
             sort_by = "product_display_name"
             sort_order = "ASC"
             logger.info("Casual persona → alphabetical recommendations")
         elif persona_style == "minimalist":
+            # Minimalist: Simple items, all categories
             sort_by = "product_display_name"
             sort_order = "ASC"
             logger.info("Minimalist persona → simple recommendations")

@@ -220,13 +220,20 @@ async def get_user_profile(
         product.image_url = get_image_url(product.product_id)
         purchase_history.append(product)
 
+    # Convert color_prefs from map to list (database stores as map<string,double>)
+    color_prefs_map = user.get("color_prefs", {})
+    if isinstance(color_prefs_map, dict):
+        color_prefs = sorted(color_prefs_map.keys(), key=lambda k: color_prefs_map[k], reverse=True)[:5]
+    else:
+        color_prefs = []
+
     # Build profile
     profile = UserProfile(
         user_id=user["user_id"],
         segment=user.get("segment", "Shopper"),
         avg_price_point=user.get("avg_price_point", user.get("avg_price", 0)),
         preferred_categories=user.get("preferred_categories", []),
-        color_prefs=user.get("color_prefs", []),
+        color_prefs=color_prefs,
         price_range={
             "min": user.get("min_price", 0),
             "max": user.get("max_price", 0),
