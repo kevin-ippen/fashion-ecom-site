@@ -99,6 +99,14 @@ class LakebaseRepository:
                 where_clauses.append("price <= :max_price")
                 params["max_price"] = filters["max_price"]
 
+            if filters.get("min_year"):
+                where_clauses.append("year >= :min_year")
+                params["min_year"] = filters["min_year"]
+
+            if filters.get("max_year"):
+                where_clauses.append("year <= :max_year")
+                params["max_year"] = filters["max_year"]
+
             # Keyword filtering with OR logic (matches sub_category, article_type, or product name)
             if filters.get("keywords"):
                 keywords = filters["keywords"]

@@ -211,54 +211,46 @@ async def get_recommendations(
     logger.info(f"User {user_id} has persona style: {persona_style}")
 
     try:
-        # DETERMINISTIC RECOMMENDATIONS based on persona style with SQL RANDOM()
-        logger.info(f"🎯 Deterministic persona-based recommendations for user {user_id}")
+        # INTELLIGENT ML-POWERED RECOMMENDATIONS
+        logger.info(f"🤖 Intelligent recommendations for user {user_id} ({persona_style} persona)")
 
-        # Build filters for recommendations based on persona style
-        # Note: user's preferred_categories contains sub_category values, not master_category
-        # Let persona logic determine appropriate filters
-        filters = {}
-        preferred_cats = user.get("preferred_categories", [])
-        logger.info(f"User preferred categories (for reference): {preferred_cats}")
+        # Get user embedding from user_style_features table
+        user_features = await repo.get_user_style_features(user_id)
 
-        # Simple approach: SQL RANDOM() for true randomization
-        # Only apply light persona-specific filters, no complex keywords
-        if persona_style == "luxury":
-            # Luxury: Filter to expensive items only (>= median price)
-            filters["min_price"] = 1500
-            logger.info("Luxury persona → filtering price >= 1500, RANDOM order")
-        elif persona_style == "budget":
-            # Budget: Filter to affordable items only (<= median price)
-            filters["max_price"] = 1500
-            logger.info("Budget persona → filtering price <= 1500, RANDOM order")
-        elif persona_style == "athletic":
-            # Athletic: Focus on Apparel only
-            if not filters.get("master_category"):
-                filters["master_category"] = "Apparel"
-            logger.info("Athletic persona → filtering Apparel, RANDOM order")
-        elif persona_style == "formal":
-            # Formal: Focus on Apparel only
-            if not filters.get("master_category"):
-                filters["master_category"] = "Apparel"
-            logger.info("Formal persona → filtering Apparel, RANDOM order")
+        if not user_features or not user_features.get("user_embedding"):
+            logger.warning(f"No user embedding found for {user_id}, falling back to SQL RANDOM")
+            raise Exception("No user embedding available")
+
+        # Parse user embedding
+        import json
+        import numpy as np
+        user_embedding_json = user_features.get("user_embedding")
+        if isinstance(user_embedding_json, str):
+            user_embedding = np.array(json.loads(user_embedding_json), dtype=np.float32)
         else:
-            # All other personas: no filters, just random
-            logger.info(f"{persona_style.title()} persona → no filters, RANDOM order")
+            user_embedding = np.array(user_embedding_json, dtype=np.float32)
 
-        # Use SQL RANDOM() for true randomization at database level
-        sort_by = "RANDOM"
-        sort_order = ""  # Not used for RANDOM
+        # Normalize embedding (ensure L2 norm = 1 for cosine similarity)
+        norm = np.linalg.norm(user_embedding)
+        if norm > 0:
+            user_embedding = user_embedding / norm
 
-        # Get products with SQL-level randomization
-        products_data = await repo.get_products(
+        logger.info(f"User embedding loaded: shape={user_embedding.shape}, norm={np.linalg.norm(user_embedding):.4f}")
+
+        # Use intelligent recommendations service
+        from services.intelligent_recommendations_service import intelligent_recommendations_service
+        from services.vector_search_service import vector_search_service
+
+        products_data = await intelligent_recommendations_service.get_recommendations(
+            user=user,
+            user_embedding=user_embedding,
+            persona_style=persona_style,
+            vector_search_service=vector_search_service,
             limit=limit,
-            offset=0,
-            filters=filters if filters else None,
-            sort_by=sort_by,
-            sort_order=sort_order
+            apply_diversity=True  # Apply MMR for variety
         )
 
-        logger.info(f"✅ Returning {len(products_data)} truly randomized recommendations")
+        logger.info(f"✅ Returning {len(products_data)} intelligent ML-powered recommendations")
 
     except Exception as e:
         logger.warning(f"⚠️ Vector Search failed, using rule-based fallback: {e}")
