@@ -113,46 +113,76 @@ async def list_products(
                 preferred_cats = user.get("preferred_categories", [])
                 logger.info(f"User preferred categories (for reference): {preferred_cats}")
 
-                # Simple approach: SQL RANDOM() for true randomization
-                # Only apply light persona-specific filters, no complex keywords
+                # Persona-specific category weights for diversity
+                # These ensure balanced category representation instead of skewing toward one category
+                PERSONA_CATEGORY_WEIGHTS = {
+                    "luxury": {"Apparel": 0.50, "Accessories": 0.25, "Footwear": 0.25},
+                    "budget": {"Apparel": 0.50, "Footwear": 0.30, "Accessories": 0.20},
+                    "budget_savvy": {"Apparel": 0.50, "Footwear": 0.30, "Accessories": 0.20},
+                    "athletic": {"Apparel": 0.60, "Footwear": 0.40},
+                    "formal": {"Apparel": 0.55, "Accessories": 0.30, "Footwear": 0.15},
+                    "professional": {"Apparel": 0.55, "Accessories": 0.30, "Footwear": 0.15},
+                    "casual": {"Apparel": 0.60, "Footwear": 0.25, "Accessories": 0.15},
+                    "urban_casual": {"Apparel": 0.60, "Footwear": 0.25, "Accessories": 0.15},
+                }
+
+                # Apply persona-specific filters (actual product price range: $0-300)
+                category_weights = PERSONA_CATEGORY_WEIGHTS.get(persona_style, {"Apparel": 0.50, "Footwear": 0.25, "Accessories": 0.25})
+                use_balanced_sampling = True  # Use category-balanced sampling for diversity
+
                 if persona_style == "luxury":
-                    # Luxury: Filter to expensive items only (>= median price)
-                    filters["min_price"] = 1500
-                    logger.info("Luxury persona → filtering price >= 1500, RANDOM order")
-                elif persona_style == "budget":
-                    # Budget: Filter to affordable items only (<= median price)
-                    filters["max_price"] = 1500
-                    logger.info("Budget persona → filtering price <= 1500, RANDOM order")
+                    # Luxury: Top 20% of products ($200-300)
+                    filters["min_price"] = 200
+                    logger.info("Luxury persona → filtering price >= $200, category-balanced sampling")
+                elif persona_style in ["budget", "budget_savvy"]:
+                    # Budget: Low range ($10-100)
+                    filters["min_price"] = 10
+                    filters["max_price"] = 100
+                    logger.info("Budget persona → filtering price $10-100, category-balanced sampling")
                 elif persona_style == "athletic":
-                    # Athletic: Focus on Apparel only
-                    if not master_category and not sub_category:
-                        filters["master_category"] = "Apparel"
-                    logger.info("Athletic persona → filtering Apparel, RANDOM order")
-                elif persona_style == "formal":
-                    # Formal: Focus on Apparel only
-                    if not master_category:
-                        filters["master_category"] = "Apparel"
-                    logger.info("Formal persona → filtering Apparel, RANDOM order")
+                    # Athletic: Mid range ($80-180), only Apparel/Footwear
+                    filters["min_price"] = 80
+                    filters["max_price"] = 180
+                    logger.info("Athletic persona → filtering Apparel/Footwear $80-180, category-balanced sampling")
+                elif persona_style in ["formal", "professional"]:
+                    # Professional: Upper range ($150-300)
+                    filters["min_price"] = 150
+                    logger.info("Professional persona → filtering Apparel/Accessories $150+, category-balanced sampling")
+                elif persona_style in ["casual", "urban_casual"]:
+                    # Urban Casual: Mid-high range ($100-200)
+                    filters["min_price"] = 100
+                    filters["max_price"] = 200
+                    logger.info("Urban Casual persona → filtering price $100-200, category-balanced sampling")
                 else:
-                    # All other personas: no filters, just random
-                    logger.info(f"{persona_style.title()} persona → no filters, RANDOM order")
+                    # All other personas: no specific filters
+                    logger.info(f"{persona_style.title()} persona → no filters, category-balanced sampling")
 
-                # Use SQL RANDOM() for true randomization at database level
-                sort_by = "RANDOM"
-                sort_order = ""  # Not used for RANDOM
+                # If user applied a specific category filter, fall back to regular random
+                if master_category or sub_category:
+                    use_balanced_sampling = False
+                    logger.info("User applied category filter → using regular random sorting")
 
-                # Get products with SQL-level randomization
-                products_data = await repo.get_products(
-                    limit=page_size,
-                    offset=offset,
-                    filters=filters if filters else None,
-                    sort_by=sort_by,
-                    sort_order=sort_order
-                )
+                if use_balanced_sampling:
+                    # Use category-balanced sampling for diverse results
+                    products_data = await repo.get_products_category_balanced(
+                        limit=page_size,
+                        offset=offset,
+                        filters=filters if filters else None,
+                        category_weights=category_weights
+                    )
+                else:
+                    # User applied category filter, use regular random
+                    products_data = await repo.get_products(
+                        limit=page_size,
+                        offset=offset,
+                        filters=filters if filters else None,
+                        sort_by="RANDOM",
+                        sort_order=""
+                    )
 
                 total = await repo.get_product_count(filters if filters else None)
 
-                logger.info(f"✅ Returning {len(products_data)} truly randomized products")
+                logger.info(f"✅ Returning {len(products_data)} category-balanced products")
             else:
                 logger.warning(f"User {user_id} not found, falling back to standard sorting")
                 # Fall through to standard sorting below

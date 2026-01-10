@@ -33,16 +33,24 @@ class LakebaseRepository:
         - Innerwear (underwear, bras, intimates)
         - Loungewear and Nightwear (sleepwear, pajamas)
         - Swimwear
-        - Saris/Sarees (both singular and plural)
+        - Indian traditional garments (Saree, Kurta, Dupatta, Churidar, etc.)
         - Free gifts and personal care items
 
         Only includes:
-        - Apparel, Accessories, Footwear
+        - Apparel, Accessories, Footwear (Western/international styles)
         """
         return """
             master_category IN ('Apparel', 'Accessories', 'Footwear')
-            AND sub_category NOT IN ('Innerwear', 'Loungewear and Nightwear', 'Saree', 'Free Gifts', 'Fragrance', 'Skin Care')
-            AND article_type NOT IN ('Swimwear', 'Saree', 'Sarees', 'Free Gifts', 'Perfume and Body Mist', 'Mens Grooming Kit')
+            AND sub_category NOT IN (
+                'Innerwear', 'Loungewear and Nightwear', 'Free Gifts', 'Fragrance', 'Skin Care',
+                'Saree', 'Kurta', 'Kurtas', 'Dupatta', 'Churidar', 'Salwar', 'Lehenga Choli',
+                'Kameez', 'Dhoti', 'Patiala', 'Kurta Sets', 'Sarees', 'Salwar and Dupatta', 'Lehenga'
+            )
+            AND article_type NOT IN (
+                'Swimwear', 'Free Gifts', 'Perfume and Body Mist', 'Mens Grooming Kit',
+                'Saree', 'Sarees', 'Kurta', 'Kurtas', 'Dupatta', 'Churidar', 'Salwar',
+                'Lehenga Choli', 'Kameez', 'Dhoti', 'Patiala'
+            )
         """
 
     async def _execute_query(self, query: str, params: Optional[Dict] = None) -> List[Dict[str, Any]]:
@@ -279,6 +287,121 @@ class LakebaseRepository:
                 }
             }
         return {}
+
+    async def get_products_category_balanced(
+        self,
+        limit: int = 24,
+        offset: int = 0,
+        filters: Optional[Dict[str, Any]] = None,
+        category_weights: Optional[Dict[str, float]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get products with category-balanced sampling for better diversity.
+
+        Instead of pure random sampling (which can skew toward dominant categories),
+        this samples products per category based on weights, then interleaves them.
+
+        Args:
+            limit: Total number of products to return
+            offset: Pagination offset
+            filters: Optional filters (price, color, etc.)
+            category_weights: Dict of {master_category: weight}, e.g. {"Apparel": 0.5, "Footwear": 0.3, "Accessories": 0.2}
+                             If not provided, uses equal weighting across categories.
+
+        Returns:
+            List of products with category diversity
+        """
+        # Default weights if not specified
+        if not category_weights:
+            category_weights = {"Apparel": 0.50, "Footwear": 0.25, "Accessories": 0.25}
+
+        # Build base where clause
+        where_clauses = [f"({self._get_base_product_filter()})"]
+        params = {}
+
+        if filters:
+            if filters.get("gender"):
+                where_clauses.append("gender = :gender")
+                params["gender"] = filters["gender"]
+
+            if filters.get("base_color"):
+                where_clauses.append("base_color = :base_color")
+                params["base_color"] = filters["base_color"]
+
+            if filters.get("season"):
+                where_clauses.append("season = :season")
+                params["season"] = filters["season"]
+
+            if filters.get("min_price"):
+                where_clauses.append("price >= :min_price")
+                params["min_price"] = filters["min_price"]
+
+            if filters.get("max_price"):
+                where_clauses.append("price <= :max_price")
+                params["max_price"] = filters["max_price"]
+
+            # Note: master_category is handled per-category below
+            # Keyword filtering
+            if filters.get("keywords"):
+                keywords = filters["keywords"]
+                keyword_conditions = []
+                for i, keyword in enumerate(keywords):
+                    param_name = f"keyword_{i}"
+                    keyword_conditions.append(
+                        f"(sub_category ILIKE :{param_name} OR article_type ILIKE :{param_name} OR product_display_name ILIKE :{param_name})"
+                    )
+                    params[param_name] = f"%{keyword}%"
+                where_clauses.append(f"({' OR '.join(keyword_conditions)})")
+
+        base_where = f"WHERE {' AND '.join(where_clauses)}"
+
+        # Sample products per category
+        all_products = []
+        for category, weight in category_weights.items():
+            cat_limit = max(1, int(limit * weight * 2))  # Sample 2x for pagination
+
+            cat_query = f"""
+                SELECT *
+                FROM {self.products_table}
+                {base_where}
+                    AND master_category = :cat_{category}
+                ORDER BY RANDOM()
+                LIMIT :cat_limit_{category}
+            """
+            params[f"cat_{category}"] = category
+            params[f"cat_limit_{category}"] = cat_limit
+
+            try:
+                cat_products = await self._execute_query(cat_query, params)
+                all_products.extend(cat_products)
+                logger.debug(f"Category {category}: sampled {len(cat_products)} products")
+            except Exception as e:
+                logger.warning(f"Error sampling {category}: {e}")
+
+        # Interleave products from different categories for diversity
+        # Group by category
+        by_category = {}
+        for p in all_products:
+            cat = p.get("master_category", "Other")
+            if cat not in by_category:
+                by_category[cat] = []
+            by_category[cat].append(p)
+
+        # Round-robin interleave
+        interleaved = []
+        category_lists = list(by_category.values())
+        max_len = max(len(lst) for lst in category_lists) if category_lists else 0
+
+        for i in range(max_len):
+            for cat_list in category_lists:
+                if i < len(cat_list):
+                    interleaved.append(cat_list[i])
+
+        # Apply offset and limit
+        result = interleaved[offset:offset + limit]
+        logger.info(f"Category-balanced sampling: {len(result)} products ({dict((k, len(v)) for k, v in by_category.items())})")
+
+        return result
 
     async def search_products_by_text(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
         """Search products by text query with NULL handling"""

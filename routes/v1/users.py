@@ -16,15 +16,13 @@ WORKSPACE_HOST = settings.DATABRICKS_WORKSPACE_URL
 
 # Curated personas with rich data and complete embeddings
 # These users have the most complete taste profiles and shopping history
+# Updated to 5 high-quality personas with properly aligned embeddings
 CURATED_PERSONA_IDS = {
-    "athletic": "user_001239",
-    "budget": "user_008711",
-    "casual": "user_001249",
-    "formal": "user_001274",
-    "luxury": "user_001273",
-    "minimalist": "user_001232",
-    "trendy": "user_001305",
-    "vintage": "user_001289"
+    "luxury": "user_luxury_001",
+    "urban_casual": "user_casual_002",
+    "athletic": "user_athletic_003",
+    "budget_savvy": "user_budget_004",
+    "professional": "user_professional_005"
 }
 
 
@@ -64,21 +62,24 @@ def format_persona(user_data: dict) -> dict:
     # Generate a display name from the style_profile
     style_profile = user_data.get("style_profile", "Shopper")
     segment_names = {
-        "athletic": "Athletic Style Enthusiast",
+        # Current 5 personas
+        "luxury": "Luxury Fashion Enthusiast",
+        "urban_casual": "Urban Casual Style",
+        "athletic": "Athletic Lifestyle",
+        "budget_savvy": "Budget-Conscious Shopper",
+        "professional": "Business Professional",
+        # Legacy mappings (for backward compatibility)
         "budget": "Budget-Conscious Shopper",
         "casual": "Casual Style Lover",
-        "formal": "Formal Wear Professional",
-        "luxury": "Luxury Fashion Enthusiast",
+        "formal": "Business Professional",
         "minimalist": "Minimalist Style Enthusiast",
         "trendy": "Trendsetter",
         "vintage": "Vintage Style Enthusiast",
-        # Legacy mappings
         "budget_conscious": "Budget-Conscious Shopper",
         "luxury_seeker": "Luxury Fashion Enthusiast",
         "trendsetter": "Trendsetter",
         "vintage_lover": "Vintage Style Enthusiast",
-        "athleisure": "Athletic Style Enthusiast",
-        "professional": "Formal Wear Professional"
+        "athleisure": "Athletic Lifestyle"
     }
     name = segment_names.get(style_profile.lower() if style_profile else "", f"{style_profile.title() if style_profile else 'Fashion'} Shopper")
 

@@ -217,14 +217,14 @@ async def get_recommendations(
         # Get user embedding from user_style_features table
         user_features = await repo.get_user_style_features(user_id)
 
-        if not user_features or not user_features.get("user_embedding"):
-            logger.warning(f"No user embedding found for {user_id}, falling back to SQL RANDOM")
+        if not user_features or not user_features.get("taste_embedding"):
+            logger.warning(f"No taste_embedding found for {user_id}, falling back to category-balanced sampling")
             raise Exception("No user embedding available")
 
-        # Parse user embedding
+        # Parse user embedding (stored as taste_embedding in users table)
         import json
         import numpy as np
-        user_embedding_json = user_features.get("user_embedding")
+        user_embedding_json = user_features.get("taste_embedding")
         if isinstance(user_embedding_json, str):
             user_embedding = np.array(json.loads(user_embedding_json), dtype=np.float32)
         else:
@@ -253,24 +253,51 @@ async def get_recommendations(
         logger.info(f"✅ Returning {len(products_data)} intelligent ML-powered recommendations")
 
     except Exception as e:
-        logger.warning(f"⚠️ Vector Search failed, using rule-based fallback: {e}")
+        logger.warning(f"⚠️ Vector Search failed, using category-balanced fallback: {e}")
 
-        # Fallback: Rule-based recommendations using Lakebase query
+        # Fallback: Category-balanced recommendations using Lakebase query
         filters = {}
-        app_filters = {}  # Initialize for fallback path
 
-        if restrict_price and persona.get("p25_price") and persona.get("p75_price"):
-            filters["min_price"] = persona["p25_price"] * 0.8
-            filters["max_price"] = persona["p75_price"] * 1.2
+        # Persona-specific category weights for diversity
+        PERSONA_CATEGORY_WEIGHTS = {
+            "luxury": {"Apparel": 0.50, "Accessories": 0.25, "Footwear": 0.25},
+            "budget": {"Apparel": 0.50, "Footwear": 0.30, "Accessories": 0.20},
+            "budget_savvy": {"Apparel": 0.50, "Footwear": 0.30, "Accessories": 0.20},
+            "athletic": {"Apparel": 0.60, "Footwear": 0.40},
+            "formal": {"Apparel": 0.55, "Accessories": 0.30, "Footwear": 0.15},
+            "professional": {"Apparel": 0.55, "Accessories": 0.30, "Footwear": 0.15},
+            "casual": {"Apparel": 0.60, "Footwear": 0.25, "Accessories": 0.15},
+            "urban_casual": {"Apparel": 0.60, "Footwear": 0.25, "Accessories": 0.15},
+        }
 
-        if restrict_category and persona.get("preferred_categories"):
-            filters["master_category"] = persona["preferred_categories"][0]
-            logger.info(f"Filtering by category: {filters['master_category']}")
+        # Apply persona-specific price filters
+        if persona_style == "luxury":
+            filters["min_price"] = 200
+        elif persona_style in ["budget", "budget_savvy"]:
+            filters["min_price"] = 10
+            filters["max_price"] = 100
+        elif persona_style == "athletic":
+            filters["min_price"] = 80
+            filters["max_price"] = 180
+        elif persona_style in ["formal", "professional"]:
+            filters["min_price"] = 150
+        elif persona_style in ["casual", "urban_casual"]:
+            filters["min_price"] = 100
+            filters["max_price"] = 200
 
-        products_data = await repo.get_products(
-            limit=limit * 3,
-            filters=filters
+        category_weights = PERSONA_CATEGORY_WEIGHTS.get(
+            persona_style,
+            {"Apparel": 0.50, "Footwear": 0.25, "Accessories": 0.25}
         )
+
+        # Use category-balanced sampling for diverse results
+        products_data = await repo.get_products_category_balanced(
+            limit=limit,
+            filters=filters,
+            category_weights=category_weights
+        )
+
+        logger.info(f"✅ Category-balanced fallback returned {len(products_data)} products")
 
     # Convert to ProductDetail models with personalization reasons
     products = []

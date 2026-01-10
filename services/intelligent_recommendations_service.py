@@ -266,39 +266,56 @@ class IntelligentRecommendationsService:
         """
         filters = {}
 
-        # Persona-specific filters (light touch)
+        # Persona-specific filters (actual product price range: $0-300)
+        # Note: We do NOT filter by category here to allow vector search to return diverse results
+        # Category diversity is handled by MMR after fetching candidates
         if persona_style == "luxury":
-            filters["min_price"] = 1500
-        elif persona_style == "budget":
-            filters["max_price"] = 1500
-        elif persona_style in ["athletic", "formal"]:
-            filters["master_category"] = "Apparel"
+            filters["min_price"] = 200
+        elif persona_style in ["budget", "budget_savvy"]:
+            filters["min_price"] = 10
+            filters["max_price"] = 100
+        elif persona_style == "athletic":
+            filters["min_price"] = 80
+            filters["max_price"] = 180
+            # Athletic can include all categories, MMR will handle diversity
+        elif persona_style in ["formal", "professional"]:
+            filters["min_price"] = 150
+            # Professional can include all categories, MMR will handle diversity
+        elif persona_style in ["casual", "urban_casual"]:
+            filters["min_price"] = 100
+            filters["max_price"] = 200
 
-        # User-specific category preferences (optional soft filter)
-        # Only apply if user has strong category preferences (< 3 categories)
-        preferred_categories = user.get("preferred_categories", [])
-        if len(preferred_categories) <= 2 and preferred_categories:
-            # Expand to master categories if sub-categories provided
-            master_cats = set()
-            for cat in preferred_categories:
-                # Map common sub-categories to master categories
-                if cat in ["Topwear", "Bottomwear", "Dress", "Innerwear", "Loungewear and Nightwear",
-                          "Saree", "Socks", "Apparel Set"]:
-                    master_cats.add("Apparel")
-                elif cat in ["Shoes", "Flip Flops", "Sandal"]:
-                    master_cats.add("Footwear")
-                elif cat in ["Watches", "Bags", "Accessories", "Eyewear", "Wallets", "Belts",
-                            "Scarves", "Jewellery", "Ties", "Fragrance", "Free Gifts"]:
-                    master_cats.add("Accessories")
-                else:
-                    # Assume it's already a master category
-                    master_cats.add(cat)
-
-            if master_cats:
-                filters["master_category"] = list(master_cats)
+        # Note: Removed user-specific category filtering here
+        # Category diversity is now handled by MMR algorithm which ensures
+        # we don't get all footwear or all apparel
 
         logger.info(f"Built filters for {persona_style} persona: {filters}")
         return filters
+
+    def get_category_weights(self, persona_style: str) -> Dict[str, float]:
+        """
+        Get category sampling weights for persona to ensure diversity
+
+        Args:
+            persona_style: The persona style
+
+        Returns:
+            Dict of category -> weight for balanced sampling
+        """
+        PERSONA_CATEGORY_WEIGHTS = {
+            "luxury": {"Apparel": 0.50, "Accessories": 0.25, "Footwear": 0.25},
+            "budget": {"Apparel": 0.50, "Footwear": 0.30, "Accessories": 0.20},
+            "budget_savvy": {"Apparel": 0.50, "Footwear": 0.30, "Accessories": 0.20},
+            "athletic": {"Apparel": 0.60, "Footwear": 0.40},
+            "formal": {"Apparel": 0.55, "Accessories": 0.30, "Footwear": 0.15},
+            "professional": {"Apparel": 0.55, "Accessories": 0.30, "Footwear": 0.15},
+            "casual": {"Apparel": 0.60, "Footwear": 0.25, "Accessories": 0.15},
+            "urban_casual": {"Apparel": 0.60, "Footwear": 0.25, "Accessories": 0.15},
+        }
+        return PERSONA_CATEGORY_WEIGHTS.get(
+            persona_style,
+            {"Apparel": 0.50, "Footwear": 0.25, "Accessories": 0.25}
+        )
 
 
 # Global service instance
