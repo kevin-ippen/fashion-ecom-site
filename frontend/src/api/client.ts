@@ -53,6 +53,27 @@ export const productsApi = {
     });
     return response.data;
   },
+
+  getTrending: async (limit = 20): Promise<ProductListResponse> => {
+    const response = await apiClient.get('/products/trending', {
+      params: { limit },
+    });
+    return response.data;
+  },
+
+  getSeasonal: async (season?: string, limit = 20): Promise<ProductListResponse> => {
+    const response = await apiClient.get('/products/seasonal', {
+      params: { season, limit },
+    });
+    return response.data;
+  },
+
+  getNewArrivals: async (limit = 20, min_year = 2017): Promise<ProductListResponse> => {
+    const response = await apiClient.get('/products/new-arrivals', {
+      params: { limit, min_year },
+    });
+    return response.data;
+  },
 };
 
 export const usersApi = {

@@ -9,16 +9,22 @@ import { Button } from '@/components/ui/Button';
 export function Home() {
   const selectedPersona = usePersonaStore((state) => state.selectedPersona);
 
-  // Fetch featured products
-  const { data: featuredData, isLoading: featuredLoading } = useQuery({
-    queryKey: ['products', 'featured'],
-    queryFn: () =>
-      productsApi.list({
-        page: 1,
-        page_size: 8,
-        sort_by: 'price',
-        sort_order: 'DESC',
-      }),
+  // Fetch trending products
+  const { data: trendingData, isLoading: trendingLoading } = useQuery({
+    queryKey: ['products', 'trending'],
+    queryFn: () => productsApi.getTrending(8),
+  });
+
+  // Fetch seasonal products
+  const { data: seasonalData, isLoading: seasonalLoading } = useQuery({
+    queryKey: ['products', 'seasonal'],
+    queryFn: () => productsApi.getSeasonal(undefined, 8),
+  });
+
+  // Fetch new arrivals
+  const { data: newArrivalsData, isLoading: newArrivalsLoading } = useQuery({
+    queryKey: ['products', 'new-arrivals'],
+    queryFn: () => productsApi.getNewArrivals(8, 2017),
   });
 
   // Fetch personalized recommendations if persona is selected
@@ -103,23 +109,67 @@ export function Home() {
         </section>
       )}
 
-      {/* Featured Products Section */}
+      {/* Trending Products Section */}
+      <section className="border-t border-stone-200 bg-white py-20">
+        <div className="container mx-auto px-4">
+          <div className="mb-12 text-center">
+            <h2 className="font-serif text-3xl font-semibold tracking-tight text-stone-900 md:text-4xl">
+              Trending Now
+            </h2>
+            <p className="mt-3 font-sans text-base text-stone-600">
+              Most popular styles this week
+            </p>
+          </div>
+          <ProductGrid
+            products={trendingData?.products || []}
+            showPersonalization={false}
+            isLoading={trendingLoading}
+          />
+          <div className="mt-12 text-center">
+            <Link to="/products">
+              <Button variant="outline" size="lg">
+                View All Trending
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Seasonal Collection Section */}
       <section className="border-t border-stone-200 bg-stone-50 py-20">
         <div className="container mx-auto px-4">
           <div className="mb-12 text-center">
             <h2 className="font-serif text-3xl font-semibold tracking-tight text-stone-900 md:text-4xl">
-              {selectedPersona ? 'Discover More' : 'New Arrivals'}
+              Winter Collection
             </h2>
             <p className="mt-3 font-sans text-base text-stone-600">
-              {selectedPersona
-                ? 'Explore our latest collection'
-                : 'Fresh styles added weekly'}
+              Stay warm and stylish this season
             </p>
           </div>
           <ProductGrid
-            products={featuredData?.products || []}
+            products={seasonalData?.products || []}
             showPersonalization={false}
-            isLoading={featuredLoading}
+            isLoading={seasonalLoading}
+          />
+        </div>
+      </section>
+
+      {/* New Arrivals Section */}
+      <section className="border-t border-stone-200 bg-white py-20">
+        <div className="container mx-auto px-4">
+          <div className="mb-12 text-center">
+            <h2 className="font-serif text-3xl font-semibold tracking-tight text-stone-900 md:text-4xl">
+              New Arrivals
+            </h2>
+            <p className="mt-3 font-sans text-base text-stone-600">
+              Fresh styles just added
+            </p>
+          </div>
+          <ProductGrid
+            products={newArrivalsData?.products || []}
+            showPersonalization={false}
+            isLoading={newArrivalsLoading}
           />
           <div className="mt-12 text-center">
             <Link to="/products">
