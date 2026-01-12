@@ -252,11 +252,11 @@ class BusinessFeaturesService:
         """
         logger.info(f"Getting featured arrivals (limit={limit})")
 
-        # Fetch products sorted by outfit pairing count (most versatile items first)
+        # Fetch random products for diversity
         new_products = await lakebase_repo.get_products(
             limit=limit * 3,  # Fetch 3x for diversity
             filters={},
-            sort_by="outfit_count",
+            sort_by="RANDOM",
             sort_order="DESC"
         )
 
