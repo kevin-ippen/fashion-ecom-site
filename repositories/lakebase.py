@@ -261,27 +261,29 @@ class LakebaseRepository:
         """Parse JSONB columns from string to Python objects if needed"""
         import json
 
-        # Handle similar_product_ids
-        if "similar_product_ids" in product:
-            val = product["similar_product_ids"]
+        def parse_id_list(val):
+            """Parse JSON string to list of integers"""
+            if val is None:
+                return []
             if isinstance(val, str):
                 try:
-                    product["similar_product_ids"] = json.loads(val)
-                except (json.JSONDecodeError, TypeError):
-                    product["similar_product_ids"] = []
-            elif val is None:
-                product["similar_product_ids"] = []
+                    parsed = json.loads(val)
+                    # Convert string IDs to integers
+                    return [int(x) for x in parsed if x]
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    return []
+            if isinstance(val, list):
+                # Already a list, but might contain strings
+                return [int(x) for x in val if x]
+            return []
+
+        # Handle similar_product_ids
+        if "similar_product_ids" in product:
+            product["similar_product_ids"] = parse_id_list(product["similar_product_ids"])
 
         # Handle complete_the_set_ids
         if "complete_the_set_ids" in product:
-            val = product["complete_the_set_ids"]
-            if isinstance(val, str):
-                try:
-                    product["complete_the_set_ids"] = json.loads(val)
-                except (json.JSONDecodeError, TypeError):
-                    product["complete_the_set_ids"] = []
-            elif val is None:
-                product["complete_the_set_ids"] = []
+            product["complete_the_set_ids"] = parse_id_list(product["complete_the_set_ids"])
 
         return product
 
