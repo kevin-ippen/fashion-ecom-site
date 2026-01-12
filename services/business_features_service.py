@@ -237,28 +237,26 @@ class BusinessFeaturesService:
         min_year: int = 2017
     ) -> List[Dict[str, Any]]:
         """
-        Get new arrival products
+        Get featured products for home page "New Arrivals" section.
 
-        In production, this would use creation_date or ingestion_date.
-        For demo, we use the 'year' field as a proxy.
+        Returns products with the most outfit pairing recommendations,
+        ensuring category diversity for a balanced display.
 
         Args:
             lakebase_repo: Lakebase repository instance
             limit: Number of products
-            min_year: Minimum year to consider "new"
+            min_year: Minimum year (legacy param, kept for API compat)
 
         Returns:
-            List of new arrival products
+            List of featured products sorted by outfit compatibility count
         """
-        logger.info(f"Getting new arrivals (limit={limit}, min_year={min_year})")
+        logger.info(f"Getting featured arrivals (limit={limit})")
 
-        # Fetch products from recent years
-        filters = {"min_year": min_year}
-
+        # Fetch products sorted by outfit pairing count (most versatile items first)
         new_products = await lakebase_repo.get_products(
             limit=limit * 3,  # Fetch 3x for diversity
-            filters=filters,
-            sort_by="year",
+            filters={},
+            sort_by="outfit_count",
             sort_order="DESC"
         )
 
@@ -277,7 +275,7 @@ class BusinessFeaturesService:
                 category_counts[master_cat] += 1
 
         logger.info(
-            f"Selected {len(arrivals)} new arrivals: "
+            f"Selected {len(arrivals)} featured arrivals: "
             f"category_dist={dict(category_counts)}"
         )
 

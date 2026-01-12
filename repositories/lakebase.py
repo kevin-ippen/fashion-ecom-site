@@ -35,9 +35,11 @@ class LakebaseRepository:
         - Swimwear
         - Indian traditional garments (Saree, Kurta, Dupatta, Churidar, etc.)
         - Free gifts and personal care items
+        - Products with no "complete the outfit" recommendations
 
         Only includes:
         - Apparel, Accessories, Footwear (Western/international styles)
+        - Products that have outfit pairing data
         """
         return """
             master_category IN ('Apparel', 'Accessories', 'Footwear')
@@ -51,6 +53,9 @@ class LakebaseRepository:
                 'Saree', 'Sarees', 'Kurta', 'Kurtas', 'Dupatta', 'Churidar', 'Salwar',
                 'Lehenga Choli', 'Kameez', 'Dhoti', 'Patiala'
             )
+            AND complete_the_set_ids IS NOT NULL
+            AND complete_the_set_ids != '[]'
+            AND jsonb_array_length(complete_the_set_ids::jsonb) > 0
         """
 
     async def _execute_query(self, query: str, params: Optional[Dict] = None) -> List[Dict[str, Any]]:
@@ -134,8 +139,11 @@ class LakebaseRepository:
         params["offset"] = offset
 
         # Use RANDOM() for sort_by="RANDOM" to get true SQL-level randomization
+        # Use outfit_count for sorting by number of complete-the-outfit recommendations
         if sort_by == "RANDOM":
             order_clause = "ORDER BY RANDOM()"
+        elif sort_by == "outfit_count":
+            order_clause = f"ORDER BY jsonb_array_length(complete_the_set_ids::jsonb) {sort_order}"
         else:
             order_clause = f"ORDER BY {sort_by} {sort_order}"
 
