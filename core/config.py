@@ -37,14 +37,14 @@ class Settings(BaseSettings):
 
     # Unity Catalog Tables - Using Lakebase-synced tables in UC
     # These are foreign tables in UC that sync from Lakebase PostgreSQL
-    UC_PRODUCTS_TABLE: str = "main.fashion_sota.products_lakebase"  # Lakebase-synced products
+    UC_PRODUCTS_TABLE: str = "main.fashion_sota.products_filtered_lakebase"  # Filtered products with outfit pairings
     UC_PRODUCT_EMBEDDINGS_TABLE: str = "main.fashion_sota.product_embeddings_us_relevant"  # For vector search
     UC_USERS_TABLE: str = "main.fashion_sota.users"  # User accounts
     UC_USER_PREFERENCES_TABLE: str = "main.fashion_sota.user_preferences"  # User preferences
 
     # Lakebase table names (PostgreSQL schema.table format)
     LAKEBASE_SCHEMA: str = "fashion_sota"
-    LAKEBASE_PRODUCTS_TABLE: str = "products_lakebase"
+    LAKEBASE_PRODUCTS_TABLE: str = "products_filtered_lakebase"
     LAKEBASE_USERS_TABLE: str = "users_lakebase"  # fashion_sota.users_lakebase (taste_embedding as JSON string)
 
     # Databricks Workspace
