@@ -282,15 +282,12 @@ async def get_similar_products(
     db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Get visually similar products using vector similarity
+    Get visually similar products.
 
-    Returns products that look similar based on FashionCLIP embeddings,
-    filtered by category compatibility and diversified by color.
+    First checks for pre-calculated recommendations (batch inference).
+    Falls back to real-time vector search if pre-calculated data unavailable.
     """
-    from services.vector_search_service import vector_search_service
-    from services.recommendations_service import recommendations_service
     import logging
-
     logger = logging.getLogger(__name__)
 
     try:
@@ -302,62 +299,83 @@ async def get_similar_products(
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail=f"Invalid product_id: {product_id}")
 
-        # Get source product with full metadata
+        # Get source product with full metadata (includes pre-calculated IDs)
         source_product = await repo.get_product_by_id(product_id_int)
         if not source_product:
             raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
 
         logger.info(f"Getting similar products for {product_id} - {source_product.get('product_display_name')}")
 
-        # Get source product embedding from vector index
-        # We'll search with a dummy embedding first to get the source product's embedding
-        # Alternative: query the product_embeddings table directly
-        from databricks.sdk import WorkspaceClient
-        w = WorkspaceClient()
+        # Check for pre-calculated similar products (batch inference)
+        similar_ids = source_product.get("similar_product_ids", [])
 
-        # Query product_embeddings table for source product embedding
-        query = f"""
-        SELECT embedding
-        FROM main.fashion_sota.product_embeddings
-        WHERE product_id = '{product_id_int}'
-        LIMIT 1
-        """
+        if similar_ids and len(similar_ids) > 0:
+            # Use pre-calculated recommendations (fast path)
+            logger.info(f"Using pre-calculated similar products: {len(similar_ids)} IDs available")
 
-        execution_result = w.statement_execution.execute_statement(
-            statement=query,
-            warehouse_id=settings.SQL_WAREHOUSE_ID if hasattr(settings, 'SQL_WAREHOUSE_ID') else "148ccb90800933a1"
-        )
-        result = execution_result.result
-
-        if not result or not result.data_array or len(result.data_array) == 0:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No embedding found for product {product_id}. Product may not be indexed."
+            # Fetch full product details via efficient batch lookup
+            similar_products = await repo.get_products_by_ids(
+                product_ids=similar_ids[:limit],
+                preserve_order=True
             )
 
-        # Extract embedding (stored as array<double>)
-        embedding_data = result.data_array[0][0]  # First row, first column
-        if isinstance(embedding_data, str):
-            import json
-            embedding_data = json.loads(embedding_data)
+            logger.info(f"✅ Returning {len(similar_products)} pre-calculated similar products")
 
-        source_embedding = np.array(embedding_data, dtype=np.float32)
+        else:
+            # Fall back to real-time vector search (slow path)
+            logger.info("No pre-calculated similar products, using real-time vector search")
 
-        # Normalize embedding
-        norm = np.linalg.norm(source_embedding)
-        if norm > 0:
-            source_embedding = source_embedding / norm
+            from services.vector_search_service import vector_search_service
+            from services.recommendations_service import recommendations_service
+            from databricks.sdk import WorkspaceClient
 
-        logger.info(f"Retrieved source embedding: shape={source_embedding.shape}, norm={norm:.4f}")
+            w = WorkspaceClient()
 
-        # Get similar products
-        similar_products = await recommendations_service.get_similar_products(
-            source_product=source_product,
-            source_embedding=source_embedding,
-            vector_search_service=vector_search_service,
-            lakebase_repo=repo,
-            limit=limit
-        )
+            # Query product_embeddings table for source product embedding
+            query = f"""
+            SELECT embedding
+            FROM main.fashion_sota.product_embeddings_us_relevant
+            WHERE product_id = '{product_id_int}'
+            LIMIT 1
+            """
+
+            execution_result = w.statement_execution.execute_statement(
+                statement=query,
+                warehouse_id=settings.SQL_WAREHOUSE_ID if hasattr(settings, 'SQL_WAREHOUSE_ID') else "148ccb90800933a1"
+            )
+            result = execution_result.result
+
+            if not result or not result.data_array or len(result.data_array) == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No embedding found for product {product_id}. Product may not be indexed."
+                )
+
+            # Extract embedding (stored as array<double>)
+            embedding_data = result.data_array[0][0]
+            if isinstance(embedding_data, str):
+                import json
+                embedding_data = json.loads(embedding_data)
+
+            source_embedding = np.array(embedding_data, dtype=np.float32)
+
+            # Normalize embedding
+            norm = np.linalg.norm(source_embedding)
+            if norm > 0:
+                source_embedding = source_embedding / norm
+
+            logger.info(f"Retrieved source embedding: shape={source_embedding.shape}, norm={norm:.4f}")
+
+            # Get similar products via vector search
+            similar_products = await recommendations_service.get_similar_products(
+                source_product=source_product,
+                source_embedding=source_embedding,
+                vector_search_service=vector_search_service,
+                lakebase_repo=repo,
+                limit=limit
+            )
+
+            logger.info(f"✅ Returning {len(similar_products)} vector-searched similar products")
 
         # Convert to ProductDetail models
         products = []
@@ -365,8 +383,6 @@ async def get_similar_products(
             product = ProductDetail(**p)
             product.image_url = get_image_url(product.product_id)
             products.append(product)
-
-        logger.info(f"✅ Returning {len(products)} similar products")
 
         return ProductListResponse(
             products=products,
@@ -392,10 +408,10 @@ async def get_complementary_products(
     db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Get complementary products from outfit pairings
+    Get complementary products for outfit completion.
 
-    Returns products that have been paired with this product in brand lookbook outfits.
-    Uses the outfit_recommendations_filtered table (outliers removed).
+    First checks for pre-calculated recommendations (batch inference).
+    Falls back to real-time lookbook query if pre-calculated data unavailable.
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -409,23 +425,53 @@ async def get_complementary_products(
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail=f"Invalid product_id: {product_id}")
 
-        # Get source product
+        # Get source product (includes pre-calculated IDs)
         source_product = await repo.get_product_by_id(product_id_int)
         if not source_product:
             raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
 
         logger.info(f"Getting outfit pairings for {product_id} - {source_product.get('product_display_name')}")
 
-        # Query outfit_recommendations_filtered table
+        # Check for pre-calculated complete-the-set products (batch inference)
+        complete_set_ids = source_product.get("complete_the_set_ids", [])
+
+        if complete_set_ids and len(complete_set_ids) > 0:
+            # Use pre-calculated recommendations (fast path)
+            logger.info(f"Using pre-calculated complete-the-set: {len(complete_set_ids)} IDs available")
+
+            # Fetch full product details via efficient batch lookup
+            complete_products = await repo.get_products_by_ids(
+                product_ids=complete_set_ids[:limit],
+                preserve_order=True
+            )
+
+            # Convert to ProductDetail models
+            products = []
+            for p in complete_products:
+                product = ProductDetail(**p)
+                product.image_url = get_image_url(product.product_id)
+                product.personalization_reason = "Styled together"
+                products.append(product)
+
+            logger.info(f"✅ Returning {len(products)} pre-calculated complete-the-set products")
+
+            return ProductListResponse(
+                products=products,
+                total=len(products),
+                page=1,
+                page_size=limit,
+                has_more=False
+            )
+
+        # Fall back to real-time lookbook query (slow path)
+        logger.info("No pre-calculated complete-the-set, using real-time lookbook query")
+
         from databricks.sdk import WorkspaceClient
         w = WorkspaceClient()
 
-        # Query for outfit pairs - include lower quality matches since filtering is strict
-        # Fetch 100+ candidates to ensure we have enough after deterministic filtering
+        # Query for outfit pairs
         search_limit = max(100, limit * 20)
 
-        # Query outfit pairings - simplified without CTE (for better compatibility)
-        # Just query lookbook table directly (the largest source with 9.4M pairs)
         query = f"""
         SELECT
             product_2_id as recommended_product_id,
@@ -454,8 +500,7 @@ async def get_complementary_products(
         """
 
         warehouse_id = settings.SQL_WAREHOUSE_ID if hasattr(settings, 'SQL_WAREHOUSE_ID') else "148ccb90800933a1"
-        logger.info(f"Executing query with warehouse: {warehouse_id}, product_id_int: {product_id_int}")
-        logger.info(f"Full query: {query}")
+        logger.info(f"Executing lookbook query with warehouse: {warehouse_id}")
 
         execution_result = w.statement_execution.execute_statement(
             statement=query,
@@ -463,12 +508,7 @@ async def get_complementary_products(
         )
         result = execution_result.result
 
-        logger.info(f"Query executed. Result type: {type(result)}, has data_array: {hasattr(result, 'data_array') if result else False}")
-        if result and hasattr(result, 'data_array'):
-            logger.info(f"Data array length: {len(result.data_array) if result.data_array else 0}")
-
         if not result or not result.data_array or len(result.data_array) == 0:
-            # Fallback: no outfit recommendations, return empty
             logger.warning(f"No outfit pairings found for product {product_id}")
             return ProductListResponse(
                 products=[],
@@ -480,7 +520,7 @@ async def get_complementary_products(
 
         # Get full product details from Lakebase for each candidate
         candidates = []
-        co_occurrence_map = {}  # Track co-occurrence counts
+        co_occurrence_map = {}
 
         for row in result.data_array:
             rec_product_id = row[0]
@@ -499,12 +539,11 @@ async def get_complementary_products(
 
         logger.info(f"Retrieved {len(candidates)} candidate products")
 
-        # Apply outfit compatibility filtering (gets more than we need)
+        # Apply outfit compatibility filtering
         from services.outfit_compatibility_service import outfit_compatibility_service
         import random
 
-        # Request more than limit for randomization
-        filter_limit = limit * 2  # Get 8 filtered candidates for 4 final selections
+        filter_limit = limit * 2
 
         filtered = outfit_compatibility_service.filter_outfit_recommendations(
             source_product=source_product,
@@ -512,62 +551,49 @@ async def get_complementary_products(
             limit=filter_limit
         )
 
-        # Apply category diversity constraint: max 1 Footwear, max 1 Accessories, rest Apparel
-        # This ensures outfit recommendations are primarily apparel items with minimal accessories/shoes
+        # Apply category diversity constraint
         category_balanced = []
         footwear_count = 0
         accessories_count = 0
 
-        # Separate candidates by master_category
         apparel_items = [p for p in filtered if p.get("master_category") == "Apparel"]
         footwear_items = [p for p in filtered if p.get("master_category") == "Footwear"]
         accessories_items = [p for p in filtered if p.get("master_category") == "Accessories"]
 
-        # Shuffle each category for variety
         random.shuffle(apparel_items)
         random.shuffle(footwear_items)
         random.shuffle(accessories_items)
 
-        logger.info(f"Category distribution: Apparel={len(apparel_items)}, Footwear={len(footwear_items)}, Accessories={len(accessories_items)}")
-
-        # Strategy: Fill with apparel first, then add at most 1 footwear and 1 accessories
-        # For limit=4: aim for 3-4 apparel, 0-1 footwear, 0-1 accessories
-        target_apparel = max(limit - 2, int(limit * 0.75))  # At least 75% apparel
-
-        # Add apparel items (priority)
+        target_apparel = max(limit - 2, int(limit * 0.75))
         category_balanced.extend(apparel_items[:target_apparel])
 
-        # Add 1 footwear if available and we have space
         if len(category_balanced) < limit and footwear_items:
             category_balanced.append(footwear_items[0])
             footwear_count = 1
 
-        # Add 1 accessories if available and we have space
         if len(category_balanced) < limit and accessories_items:
             category_balanced.append(accessories_items[0])
             accessories_count = 1
 
-        # Fill remaining slots with more apparel if needed
         remaining_slots = limit - len(category_balanced)
         if remaining_slots > 0 and len(apparel_items) > target_apparel:
             category_balanced.extend(apparel_items[target_apparel:target_apparel + remaining_slots])
 
         filtered = category_balanced
-        logger.info(f"After category balancing: {len(filtered)} products (Footwear={footwear_count}, Accessories={accessories_count}, Apparel={len(filtered) - footwear_count - accessories_count})")
+        logger.info(f"After category balancing: {len(filtered)} products")
 
-        # Convert to ProductDetail models and add metadata
+        # Convert to ProductDetail models
         products = []
         for product_dict in filtered:
             product = ProductDetail(**product_dict)
             product.image_url = get_image_url(product.product_id)
 
-            # Add personalization reason with co-occurrence count
             co_occurrence = co_occurrence_map.get(product.product_id, 1)
             product.personalization_reason = f"Paired together in {co_occurrence} outfits"
 
             products.append(product)
 
-        logger.info(f"✅ Returning {len(products)} compatible outfit recommendations")
+        logger.info(f"✅ Returning {len(products)} lookbook-sourced outfit recommendations")
 
         return ProductListResponse(
             products=products,

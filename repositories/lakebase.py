@@ -211,7 +211,76 @@ class LakebaseRepository:
                 AND ({self._get_base_product_filter()})
         """
         results = await self._execute_query(query, {"product_id": product_id})
-        return results[0] if results else None
+        if results:
+            return self._parse_jsonb_columns(results[0])
+        return None
+
+    async def get_products_by_ids(
+        self,
+        product_ids: List[int],
+        preserve_order: bool = True
+    ) -> List[Dict[str, Any]]:
+        """
+        Get multiple products by IDs efficiently (batch lookup).
+
+        Args:
+            product_ids: List of product IDs to fetch
+            preserve_order: If True, returns products in same order as input IDs
+
+        Returns:
+            List of product dictionaries
+        """
+        if not product_ids:
+            return []
+
+        # Use ANY for efficient batch lookup
+        ids_array = list(set(product_ids))  # Dedupe
+        query = f"""
+            SELECT *
+            FROM {self.products_table}
+            WHERE product_id = ANY(:ids)
+                AND ({self._get_base_product_filter()})
+        """
+        results = await self._execute_query(query, {"ids": ids_array})
+
+        # Parse JSONB columns
+        parsed_results = [self._parse_jsonb_columns(r) for r in results]
+
+        if preserve_order and results:
+            # Create lookup map for O(1) access
+            products_map = {p["product_id"]: p for p in parsed_results}
+            # Return in original order, skipping missing products
+            return [products_map[pid] for pid in product_ids if pid in products_map]
+
+        return parsed_results
+
+    def _parse_jsonb_columns(self, product: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse JSONB columns from string to Python objects if needed"""
+        import json
+
+        # Handle similar_product_ids
+        if "similar_product_ids" in product:
+            val = product["similar_product_ids"]
+            if isinstance(val, str):
+                try:
+                    product["similar_product_ids"] = json.loads(val)
+                except (json.JSONDecodeError, TypeError):
+                    product["similar_product_ids"] = []
+            elif val is None:
+                product["similar_product_ids"] = []
+
+        # Handle complete_the_set_ids
+        if "complete_the_set_ids" in product:
+            val = product["complete_the_set_ids"]
+            if isinstance(val, str):
+                try:
+                    product["complete_the_set_ids"] = json.loads(val)
+                except (json.JSONDecodeError, TypeError):
+                    product["complete_the_set_ids"] = []
+            elif val is None:
+                product["complete_the_set_ids"] = []
+
+        return product
 
     async def get_product_embeddings(self, product_ids: Optional[List[int]] = None) -> List[Dict[str, Any]]:
         """Get product embeddings, optionally filtered by product IDs"""

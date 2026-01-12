@@ -37,6 +37,10 @@ class ProductDetail(Product):
     image_url: Optional[str] = None
     similarity_score: Optional[float] = None
     personalization_reason: Optional[str] = None
+    # Pre-computed recommendations (batch inference)
+    similar_product_ids: Optional[List[int]] = None
+    complete_the_set_ids: Optional[List[int]] = None
+    recommendations_updated_at: Optional[datetime] = None
 
 
 class ProductListResponse(BaseModel):

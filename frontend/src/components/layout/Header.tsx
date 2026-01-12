@@ -2,20 +2,16 @@ import { Link } from 'react-router-dom';
 import { ShoppingCart, User, Search, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useCartStore } from '@/stores/cartStore';
-import { usePersonaStore } from '@/stores/personaStore';
 import { useState, useEffect } from 'react';
-import { PersonaSelector } from '@/components/user/PersonaSelector';
 import { CartDrawer } from '@/components/cart/CartDrawer';
 import { SmartSearch } from '@/components/search/SmartSearch';
 
 export function Header() {
-  const [showPersonaSelector, setShowPersonaSelector] = useState(false);
   const [showCartDrawer, setShowCartDrawer] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
   const itemCount = useCartStore((state) => state.item_count);
-  const selectedPersona = usePersonaStore((state) => state.selectedPersona);
 
   // Track scroll position for compact header
   useEffect(() => {
@@ -89,17 +85,10 @@ export function Header() {
                 <Search className="h-5 w-5" />
               </Button>
 
-              {/* Persona selector */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowPersonaSelector(true)}
-                className="gap-2"
-              >
+              {/* Account placeholder */}
+              <Button variant="ghost" size="sm" className="gap-2">
                 <User className="h-5 w-5" />
-                <span className="hidden lg:inline text-xs">
-                  {selectedPersona ? selectedPersona.name : 'Account'}
-                </span>
+                <span className="hidden lg:inline text-xs">Account</span>
               </Button>
 
               {/* Wishlist placeholder */}
@@ -124,46 +113,7 @@ export function Header() {
             </div>
           </div>
         </div>
-
-        {/* Personalization info bar - when persona selected */}
-        {selectedPersona && (
-          <div className="border-t border-stone-200 bg-amber-50/30">
-            <div className="container mx-auto px-4 py-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="font-sans font-medium text-stone-900">
-                    Shopping as {selectedPersona.name}
-                  </span>
-                  <span className="text-stone-600">•</span>
-                  <span className="font-sans text-stone-600">{selectedPersona.segment}</span>
-                  <Link
-                    to={`/profile/${selectedPersona.user_id}`}
-                    className="font-sans text-xs text-stone-700 underline-offset-2 hover:underline"
-                  >
-                    View Profile
-                  </Link>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowPersonaSelector(true)}
-                  className="text-xs text-stone-600 hover:text-stone-900"
-                >
-                  Change Persona
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
       </header>
-
-      {/* Mobile nav - placeholder for future improvement */}
-      {/* Would add a mobile menu drawer here */}
-
-      {/* Persona Selector Modal */}
-      {showPersonaSelector && (
-        <PersonaSelector onClose={() => setShowPersonaSelector(false)} />
-      )}
 
       {/* Cart Drawer */}
       <CartDrawer

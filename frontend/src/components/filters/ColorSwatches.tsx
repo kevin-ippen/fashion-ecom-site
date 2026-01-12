@@ -101,7 +101,6 @@ export function ColorSwatches({ colors, selectedColor, onColorSelect }: ColorSwa
           const isSelected = selectedColor === color;
           const hexColor = getColorHex(color);
           const showBorder = needsBorder(color);
-          const isGradient = hexColor.startsWith('linear-gradient');
 
           return (
             <button

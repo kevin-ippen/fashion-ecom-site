@@ -8,7 +8,7 @@ interface CartDrawerProps {
 }
 
 export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
-  const { items, item_count, total_price, removeItem, updateQuantity } = useCartStore();
+  const { items, item_count, total, removeItem, updateQuantity } = useCartStore();
 
   // Close on escape key
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -76,8 +76,8 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                     {/* Product Image */}
                     <div className="w-24 h-32 flex-shrink-0 bg-muted rounded-md overflow-hidden">
                       <img
-                        src={item.image_url}
-                        alt={item.product_name}
+                        src={item.product?.image_url}
+                        alt={item.product?.product_display_name}
                         className="w-full h-full object-cover"
                       />
                     </div>
@@ -85,10 +85,10 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                     {/* Product Details */}
                     <div className="flex-1 min-w-0">
                       <h4 className="text-body font-medium truncate-2 mb-1">
-                        {item.product_name}
+                        {item.product?.product_display_name}
                       </h4>
                       <p className="text-body-sm text-muted-foreground mb-3">
-                        ${item.price.toFixed(2)}
+                        ${(item.product?.price || 0).toFixed(2)}
                       </p>
 
                       {/* Quantity Controls */}
@@ -126,7 +126,7 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                     {/* Item Total */}
                     <div className="text-right">
                       <p className="text-body font-semibold">
-                        ${(item.price * item.quantity).toFixed(2)}
+                        ${((item.product?.price || 0) * item.quantity).toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -140,7 +140,7 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
               <div className="flex items-center justify-between text-title">
                 <span className="font-medium">Subtotal</span>
                 <span className="font-semibold">
-                  ${total_price.toFixed(2)}
+                  ${total.toFixed(2)}
                 </span>
               </div>
 

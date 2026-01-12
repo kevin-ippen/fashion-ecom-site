@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # Unity Catalog Tables - Using Lakebase-synced tables in UC
     # These are foreign tables in UC that sync from Lakebase PostgreSQL
     UC_PRODUCTS_TABLE: str = "main.fashion_sota.products_lakebase"  # Lakebase-synced products
-    UC_PRODUCT_EMBEDDINGS_TABLE: str = "main.fashion_sota.product_embeddings"  # For vector search
+    UC_PRODUCT_EMBEDDINGS_TABLE: str = "main.fashion_sota.product_embeddings_us_relevant"  # For vector search
     UC_USERS_TABLE: str = "main.fashion_sota.users"  # User accounts
     UC_USER_PREFERENCES_TABLE: str = "main.fashion_sota.user_preferences"  # User preferences
 
@@ -73,11 +73,11 @@ class Settings(BaseSettings):
     CLIP_UC_MODEL: str = "main.fashion_demo.clip_multimodal_encoder"  # Still in fashion_demo
     CLIP_EMBEDDING_DIM: int = 512
 
-    # Vector Search Endpoint - SIMPLIFIED!
-    VS_ENDPOINT_NAME: str = "fashion-vector-search"  # Changed endpoint name (with hyphen)
+    # Vector Search Endpoint - Using shared endpoint
+    VS_ENDPOINT_NAME: str = "one-env-shared-endpoint-15"
 
-    # Vector Search Index - UNIFIED INDEX (replaces 3 separate indexes)
-    VS_INDEX: str = "main.fashion_sota.product_embeddings_index"
+    # Vector Search Index - US relevant products
+    VS_INDEX: str = "main.fashion_sota.product_embeddings_us_relevant_index"
 
     # SQL Warehouse for queries
     SQL_WAREHOUSE_ID: str = "148ccb90800933a1"
