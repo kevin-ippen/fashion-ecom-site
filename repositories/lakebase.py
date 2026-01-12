@@ -53,6 +53,10 @@ class LakebaseRepository:
                 'Saree', 'Sarees', 'Kurta', 'Kurtas', 'Dupatta', 'Churidar', 'Salwar',
                 'Lehenga Choli', 'Kameez', 'Dhoti', 'Patiala'
             )
+            AND complete_the_set_ids IS NOT NULL
+            AND complete_the_set_ids != ''
+            AND complete_the_set_ids != '[]'
+            AND LENGTH(complete_the_set_ids) > 2
         """
 
     async def _execute_query(self, query: str, params: Optional[Dict] = None) -> List[Dict[str, Any]]:
