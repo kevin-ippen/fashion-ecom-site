@@ -7,18 +7,15 @@ import {
   DollarSign,
   Heart,
   TrendingUp,
-  Sparkles,
 } from 'lucide-react';
 import { usersApi } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ProductGrid } from '@/components/product/ProductGrid';
 import { formatPrice } from '@/lib/utils';
-import { usePersonaStore } from '@/stores/personaStore';
 
 export function UserProfile() {
   const { userId } = useParams<{ userId: string }>();
-  const { selectedPersona, setPersona } = usePersonaStore();
 
   // Fetch persona details
   const { data: persona, isLoading: personaLoading } = useQuery({
@@ -35,12 +32,6 @@ export function UserProfile() {
   });
 
   const isLoading = personaLoading || profileLoading;
-
-  const handleActivatePersona = () => {
-    if (persona) {
-      setPersona(persona);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -68,8 +59,6 @@ export function UserProfile() {
     );
   }
 
-  const isActive = selectedPersona?.user_id === persona.user_id;
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
@@ -90,14 +79,7 @@ export function UserProfile() {
                 <User className="h-12 w-12 text-white" />
               </div>
               <div className="flex-1 text-center md:text-left">
-                <div className="flex items-center justify-center gap-3 md:justify-start">
-                  <h1 className="text-3xl font-bold">{persona.name}</h1>
-                  {isActive && (
-                    <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
-                      Active
-                    </span>
-                  )}
-                </div>
+                <h1 className="text-3xl font-bold">{persona.name}</h1>
                 <p className="mt-2 text-lg text-gray-600">{persona.description}</p>
                 <div className="mt-4 flex flex-wrap justify-center gap-2 md:justify-start">
                   {persona.style_tags.map((tag: string) => (
@@ -110,12 +92,6 @@ export function UserProfile() {
                   ))}
                 </div>
               </div>
-              {!isActive && (
-                <Button size="lg" onClick={handleActivatePersona}>
-                  <Sparkles className="mr-2 h-5 w-5" />
-                  Activate Persona
-                </Button>
-              )}
             </div>
           </CardContent>
         </Card>
