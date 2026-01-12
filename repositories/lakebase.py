@@ -149,7 +149,8 @@ class LakebaseRepository:
             LIMIT :limit OFFSET :offset
         """
 
-        return await self._execute_query(query, params)
+        results = await self._execute_query(query, params)
+        return [self._parse_jsonb_columns(r) for r in results]
 
     async def get_product_count(self, filters: Optional[Dict[str, Any]] = None) -> int:
         """Get total count of products matching filters"""
@@ -444,7 +445,7 @@ class LakebaseRepository:
 
             try:
                 cat_products = await self._execute_query(cat_query, params)
-                all_products.extend(cat_products)
+                all_products.extend([self._parse_jsonb_columns(p) for p in cat_products])
                 logger.debug(f"Category {category}: sampled {len(cat_products)} products")
             except Exception as e:
                 logger.warning(f"Error sampling {category}: {e}")
@@ -500,4 +501,4 @@ class LakebaseRepository:
         # Log results count for debugging
         logger.info(f"Text search returned {len(results)} results")
 
-        return results
+        return [self._parse_jsonb_columns(r) for r in results]
