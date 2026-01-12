@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
-import { Search as SearchIcon, Upload, X, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { Search as SearchIcon, Upload, X, Image as ImageIcon } from 'lucide-react';
 import { searchApi } from '@/api/client';
-import { usePersonaStore } from '@/stores/personaStore';
 import { ProductGrid } from '@/components/product/ProductGrid';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -17,19 +16,16 @@ export function Search() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
-  const selectedPersona = usePersonaStore((state) => state.selectedPersona);
-
   // Text search query
   const {
     data: textSearchResults,
     isLoading: textSearchLoading,
     refetch: refetchTextSearch,
   } = useQuery({
-    queryKey: ['text-search', textQuery, selectedPersona?.user_id],
+    queryKey: ['text-search', textQuery],
     queryFn: () =>
       searchApi.searchByText({
         query: textQuery,
-        user_id: selectedPersona?.user_id,
         limit: 20,
       }),
     enabled: false, // Only run when explicitly triggered
@@ -41,11 +37,10 @@ export function Search() {
     isLoading: imageSearchLoading,
     refetch: refetchImageSearch,
   } = useQuery({
-    queryKey: ['image-search', uploadedImage, selectedPersona?.user_id],
+    queryKey: ['image-search', uploadedImage],
     queryFn: () =>
       searchApi.searchByImage({
         image: uploadedImage!,
-        user_id: selectedPersona?.user_id,
         limit: 20,
       }),
     enabled: false, // Only run when explicitly triggered
@@ -100,12 +95,6 @@ export function Search() {
           <p className="mt-2 text-lg text-gray-600">
             Find products using text descriptions or upload an image
           </p>
-          {selectedPersona && (
-            <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-100 px-4 py-2 text-sm text-blue-900">
-              <Sparkles className="h-4 w-4" />
-              Results personalized for {selectedPersona.name}
-            </div>
-          )}
         </div>
 
         {/* Search mode tabs */}
@@ -248,7 +237,6 @@ export function Search() {
                 </div>
                 <ProductGrid
                   products={searchResults.products}
-                  showPersonalization={!!selectedPersona}
                 />
               </div>
             ) : (
