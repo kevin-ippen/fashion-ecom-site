@@ -236,6 +236,153 @@ async def list_products(
     )
 
 
+# --- Specific routes MUST come before /{product_id} to avoid being caught by it ---
+
+@router.get("/new-arrivals", response_model=ProductListResponse)
+async def get_new_arrivals(
+    limit: int = Query(20, ge=1, le=50, description="Number of new arrivals"),
+    min_year: int = Query(2017, ge=2011, le=2018, description="Minimum year for new arrivals"),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get new arrival products - featured items with outfit pairings
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        from services.business_features_service import business_features_service
+
+        repo = LakebaseRepository(db)
+
+        # Get new arrivals
+        new_arrivals_data = await business_features_service.get_new_arrivals(
+            lakebase_repo=repo,
+            limit=limit,
+            min_year=min_year
+        )
+
+        # Convert to ProductDetail models
+        products = []
+        for product_dict in new_arrivals_data:
+            product = ProductDetail(**product_dict)
+            product.image_url = get_image_url(product.product_id)
+            product.personalization_reason = "New arrival"
+            products.append(product)
+
+        logger.info(f"✅ Returning {len(products)} new arrivals")
+
+        return ProductListResponse(
+            products=products,
+            total=len(products),
+            page=1,
+            page_size=limit,
+            has_more=False
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting new arrivals: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to get new arrivals: {str(e)}")
+
+
+@router.get("/trending", response_model=ProductListResponse)
+async def get_trending_products(
+    limit: int = Query(20, ge=1, le=50, description="Number of trending products"),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get trending products
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        from services.business_features_service import business_features_service
+
+        repo = LakebaseRepository(db)
+
+        trending_data = await business_features_service.get_trending_products(
+            lakebase_repo=repo,
+            limit=limit,
+            time_window="7_days"
+        )
+
+        products = []
+        for product_dict in trending_data:
+            product = ProductDetail(**product_dict)
+            product.image_url = get_image_url(product.product_id)
+            product.personalization_reason = "Trending now"
+            products.append(product)
+
+        logger.info(f"✅ Returning {len(products)} trending products")
+
+        return ProductListResponse(
+            products=products,
+            total=len(products),
+            page=1,
+            page_size=limit,
+            has_more=False
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting trending products: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to get trending products: {str(e)}")
+
+
+@router.get("/seasonal", response_model=ProductListResponse)
+async def get_seasonal_products(
+    season: Optional[str] = Query(None, description="Season (Spring, Summer, Fall, Winter)"),
+    limit: int = Query(20, ge=1, le=50, description="Number of seasonal products"),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Get seasonal products
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        from services.business_features_service import business_features_service
+
+        repo = LakebaseRepository(db)
+
+        seasonal_data = await business_features_service.get_seasonal_products(
+            lakebase_repo=repo,
+            season=season,
+            limit=limit
+        )
+
+        products = []
+        for product_dict in seasonal_data:
+            product = ProductDetail(**product_dict)
+            product.image_url = get_image_url(product.product_id)
+            product.personalization_reason = f"{season or 'Seasonal'} pick"
+            products.append(product)
+
+        logger.info(f"✅ Returning {len(products)} seasonal products")
+
+        return ProductListResponse(
+            products=products,
+            total=len(products),
+            page=1,
+            page_size=limit,
+            has_more=False
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting seasonal products: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to get seasonal products: {str(e)}")
+
+
+# --- End specific routes ---
+
+
 @router.get("/{product_id}", response_model=ProductDetail)
 async def get_product(
     product_id: str,
@@ -610,162 +757,3 @@ async def get_complementary_products(
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to get complementary products: {str(e)}")
-
-
-@router.get("/trending", response_model=ProductListResponse)
-async def get_trending_products(
-    limit: int = Query(20, ge=1, le=50, description="Number of trending products"),
-    db: AsyncSession = Depends(get_async_db)
-):
-    """
-    Get trending products
-
-    Returns popular/trending products based on engagement signals.
-    In production, this would use real user interaction data (views, add-to-cart, purchases).
-    For demo, uses weighted random selection with category balance.
-    """
-    import logging
-    logger = logging.getLogger(__name__)
-
-    try:
-        from services.business_features_service import business_features_service
-
-        repo = LakebaseRepository(db)
-
-        # Get trending products
-        trending_data = await business_features_service.get_trending_products(
-            lakebase_repo=repo,
-            limit=limit,
-            time_window="7_days"
-        )
-
-        # Convert to ProductDetail models
-        products = []
-        for product_dict in trending_data:
-            product = ProductDetail(**product_dict)
-            product.image_url = get_image_url(product.product_id)
-            product.personalization_reason = "Trending now"
-            products.append(product)
-
-        logger.info(f"✅ Returning {len(products)} trending products")
-
-        return ProductListResponse(
-            products=products,
-            total=len(products),
-            page=1,
-            page_size=limit,
-            has_more=False
-        )
-
-    except Exception as e:
-        logger.error(f"Error getting trending products: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Failed to get trending products: {str(e)}")
-
-
-@router.get("/seasonal", response_model=ProductListResponse)
-async def get_seasonal_products(
-    season: Optional[str] = Query(None, description="Season (Spring, Summer, Fall, Winter) or None for current"),
-    limit: int = Query(20, ge=1, le=50, description="Number of seasonal products"),
-    db: AsyncSession = Depends(get_async_db)
-):
-    """
-    Get seasonal collection products
-
-    Returns products appropriate for the current season (or specified season).
-    """
-    import logging
-    logger = logging.getLogger(__name__)
-
-    try:
-        from services.business_features_service import business_features_service
-
-        repo = LakebaseRepository(db)
-
-        # Get current season if not specified
-        if not season:
-            season = business_features_service.get_current_season()
-
-        # Get seasonal products
-        seasonal_data = await business_features_service.get_seasonal_products(
-            lakebase_repo=repo,
-            season=season,
-            limit=limit
-        )
-
-        # Convert to ProductDetail models
-        products = []
-        for product_dict in seasonal_data:
-            product = ProductDetail(**product_dict)
-            product.image_url = get_image_url(product.product_id)
-            product.personalization_reason = f"{season} collection"
-            products.append(product)
-
-        logger.info(f"✅ Returning {len(products)} {season} products")
-
-        return ProductListResponse(
-            products=products,
-            total=len(products),
-            page=1,
-            page_size=limit,
-            has_more=False
-        )
-
-    except Exception as e:
-        logger.error(f"Error getting seasonal products: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Failed to get seasonal products: {str(e)}")
-
-
-@router.get("/new-arrivals", response_model=ProductListResponse)
-async def get_new_arrivals(
-    limit: int = Query(20, ge=1, le=50, description="Number of new arrivals"),
-    min_year: int = Query(2017, ge=2011, le=2018, description="Minimum year for new arrivals"),
-    db: AsyncSession = Depends(get_async_db)
-):
-    """
-    Get new arrival products
-
-    Returns recently added products (using year as a proxy for demo).
-    In production, would use creation_date or ingestion_date.
-    """
-    import logging
-    logger = logging.getLogger(__name__)
-
-    try:
-        from services.business_features_service import business_features_service
-
-        repo = LakebaseRepository(db)
-
-        # Get new arrivals
-        new_arrivals_data = await business_features_service.get_new_arrivals(
-            lakebase_repo=repo,
-            limit=limit,
-            min_year=min_year
-        )
-
-        # Convert to ProductDetail models
-        products = []
-        for product_dict in new_arrivals_data:
-            product = ProductDetail(**product_dict)
-            product.image_url = get_image_url(product.product_id)
-            product.personalization_reason = "New arrival"
-            products.append(product)
-
-        logger.info(f"✅ Returning {len(products)} new arrivals")
-
-        return ProductListResponse(
-            products=products,
-            total=len(products),
-            page=1,
-            page_size=limit,
-            has_more=False
-        )
-
-    except Exception as e:
-        logger.error(f"Error getting new arrivals: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Failed to get new arrivals: {str(e)}")
