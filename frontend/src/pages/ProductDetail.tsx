@@ -9,7 +9,8 @@ import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { SizeSelector } from '@/components/product/SizeSelector';
 import { Accordion } from '@/components/ui/Accordion';
 import { formatPrice } from '@/lib/utils';
-import { useState } from 'react';
+import { filterCompatibleOutfitItems, diversifyByCategory } from '@/lib/outfitRules';
+import { useState, useMemo } from 'react';
 
 export function ProductDetail() {
   const { productId } = useParams<{ productId: string }>();
@@ -43,7 +44,23 @@ export function ProductDetail() {
   });
 
   const similarProducts = similarProductsResponse?.products || [];
-  const completeTheLookProducts = completeTheLookResponse?.products || [];
+
+  // Apply frontend outfit compatibility rules as a safety net
+  // This filters out any invalid pairings that may have slipped through the backend
+  const completeTheLookProducts = useMemo(() => {
+    if (!product || !completeTheLookResponse?.products) {
+      return [];
+    }
+
+    // Filter for compatibility (no 2 bottoms, no 2 tops, etc.)
+    const compatible = filterCompatibleOutfitItems(product, completeTheLookResponse.products);
+
+    // Ensure category diversity (max 2 per category)
+    const diversified = diversifyByCategory(compatible, 2);
+
+    // Return up to 4 items
+    return diversified.slice(0, 4);
+  }, [product, completeTheLookResponse?.products]);
 
   const handleAddToCart = () => {
     if (product) {

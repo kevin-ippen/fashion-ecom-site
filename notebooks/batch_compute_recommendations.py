@@ -99,18 +99,30 @@ products_list = products_df.collect()
 # COMMAND ----------
 
 def get_similar_products_batch(
-    product_ids: List[int],
-    embeddings: List[List[float]],
+    products_batch: List[Dict],
     limit: int = 10
 ) -> Dict[int, List[int]]:
     """
     Get similar products for a batch of products using Vector Search.
 
+    STRICT FILTERING for "You May Also Like":
+    - Same master_category (Apparel with Apparel)
+    - Same sub_category (Shorts with Shorts, Pants with Pants)
+    - Same gender (or Unisex)
+    - No duplicates
+    - Color diversity
+
     Returns dict mapping product_id -> list of similar product_ids
     """
     results = {}
 
-    for pid, embedding in zip(product_ids, embeddings):
+    for row in products_batch:
+        pid = row["product_id"]
+        embedding = row["embedding"]
+        source_category = row["master_category"]
+        source_sub_category = row["sub_category"]
+        source_gender = row["gender"]
+
         try:
             # Normalize embedding
             emb_array = np.array(embedding, dtype=np.float32)
@@ -118,20 +130,56 @@ def get_similar_products_batch(
             if norm > 0:
                 emb_array = emb_array / norm
 
-            # Search for similar products
+            # Search for more candidates to allow for strict filtering
+            search_limit = limit * 10  # More candidates for stricter filtering
             search_results = vs_index.similarity_search(
                 query_vector=emb_array.tolist(),
-                columns=["product_id"],
-                num_results=limit + 1  # +1 to exclude self
+                columns=["product_id", "master_category", "sub_category", "gender", "base_color"],
+                num_results=search_limit + 1  # +1 to exclude self
             )
 
-            # Extract product IDs (exclude self)
+            # Apply strict filtering:
+            # 1. Exclude self and duplicates
+            # 2. Same master_category
+            # 3. Same sub_category (shorts with shorts, pants with pants)
+            # 4. Same gender (or Unisex)
+            # 5. Diversify by color
             similar_ids = []
+            seen_ids = {pid}
+            color_counts = {}
+            max_per_color = 3  # Limit same-color items for diversity
+
             if "result" in search_results and "data_array" in search_results["result"]:
-                for row in search_results["result"]["data_array"]:
-                    similar_pid = int(row[0])
-                    if similar_pid != pid:
-                        similar_ids.append(similar_pid)
+                for result_row in search_results["result"]["data_array"]:
+                    similar_pid = int(result_row[0])
+                    similar_category = result_row[1] if len(result_row) > 1 else None
+                    similar_sub_category = result_row[2] if len(result_row) > 2 else None
+                    similar_gender = result_row[3] if len(result_row) > 3 else None
+                    similar_color = result_row[4] if len(result_row) > 4 else "Unknown"
+
+                    # Skip self and duplicates
+                    if similar_pid in seen_ids:
+                        continue
+                    seen_ids.add(similar_pid)
+
+                    # SAME CATEGORY: Only include products from same master_category
+                    if similar_category != source_category:
+                        continue
+
+                    # SAME SUB_CATEGORY: shorts with shorts, pants with pants
+                    if similar_sub_category != source_sub_category:
+                        continue
+
+                    # SAME GENDER: Only same gender or Unisex
+                    if similar_gender != source_gender and similar_gender != "Unisex" and source_gender != "Unisex":
+                        continue
+
+                    # Color diversity: limit items of same color
+                    color_counts[similar_color] = color_counts.get(similar_color, 0) + 1
+                    if color_counts[similar_color] > max_per_color:
+                        continue
+
+                    similar_ids.append(similar_pid)
                     if len(similar_ids) >= limit:
                         break
 
@@ -151,10 +199,10 @@ batch_count = 0
 for i in range(0, len(products_list), BATCH_SIZE):
     batch = products_list[i:i + BATCH_SIZE]
 
-    product_ids = [row["product_id"] for row in batch]
-    embeddings = [row["embedding"] for row in batch]
+    # Convert to list of dicts for the updated function
+    batch_dicts = [row.asDict() for row in batch]
 
-    batch_results = get_similar_products_batch(product_ids, embeddings, SIMILAR_PRODUCTS_LIMIT)
+    batch_results = get_similar_products_batch(batch_dicts, SIMILAR_PRODUCTS_LIMIT)
     similar_products_map.update(batch_results)
 
     batch_count += 1
@@ -170,11 +218,135 @@ print(f"✅ Computed similar products for {len(similar_products_map):,} products
 
 # COMMAND ----------
 
+# ============================================================================
+# Outfit Compatibility Rules (deterministic, no 2 bottoms together, etc.)
+# ============================================================================
+
+def categorize_product(master_category: str, sub_category: str, article_type: str) -> str:
+    """
+    Categorize product for outfit compatibility checking.
+
+    MUST be kept in sync with:
+    - services/outfit_compatibility_service.py
+    - frontend/src/lib/outfitRules.ts
+
+    Returns one of: tops, bottoms, dress, outerwear, footwear, accessories,
+                   innerwear, sleepwear, swimwear, unknown
+    """
+    OUTERWEAR_TYPES = {
+        "Jackets", "Blazers", "Sweaters", "Sweatshirts", "Rain Jacket",
+        "Nehru Jackets", "Shrug", "Coats", "Cardigans"
+    }
+    SWIMWEAR_TYPES = {"Swimwear"}
+
+    # Check isolated categories first (highest priority)
+    if sub_category == "Innerwear":
+        return "innerwear"
+    if sub_category == "Loungewear and Nightwear":
+        return "sleepwear"
+    if article_type in SWIMWEAR_TYPES:
+        return "swimwear"
+
+    # Check structural categories
+    if master_category == "Footwear":
+        return "footwear"
+    if master_category == "Accessories":
+        return "accessories"
+
+    # Apparel subcategories
+    if sub_category in ("Dress", "Saree"):
+        # Sarees and dresses are complete outfits - shouldn't pair with tops/bottoms
+        return "dress"
+    if sub_category == "Bottomwear":
+        return "bottoms"
+    if sub_category == "Socks" and master_category == "Apparel":
+        # Baby booties/socks under Apparel are accessories
+        return "accessories"
+    if sub_category == "Apparel Set":
+        # Clothing sets are complete outfits - treat like dress
+        return "dress"
+
+    # Outerwear vs regular tops
+    if sub_category == "Topwear":
+        if article_type in OUTERWEAR_TYPES:
+            return "outerwear"
+        return "tops"
+
+    # Default: unknown apparel items treated as accessories
+    if master_category == "Apparel":
+        return "accessories"
+
+    return "unknown"
+
+
+def is_outfit_compatible(
+    source_category: str, source_gender: str,
+    target_category: str, target_gender: str
+) -> bool:
+    """
+    Check if two products are compatible for an outfit pairing.
+
+    Core rules:
+    - NO duplicate categories (2 tops, 2 bottoms, 2 footwear)
+    - NO dress with tops/bottoms
+    - NO innerwear/sleepwear/swimwear with regular apparel
+    - Gender must be compatible
+    """
+    # NEVER: Isolated categories
+    isolated = {"innerwear", "sleepwear", "swimwear"}
+    if source_category in isolated or target_category in isolated:
+        return False
+
+    # NEVER: Same category duplicates
+    if source_category == target_category:
+        return False
+
+    # NEVER: Dress with tops or bottoms
+    if source_category == "dress" and target_category in {"tops", "bottoms"}:
+        return False
+    if target_category == "dress" and source_category in {"tops", "bottoms"}:
+        return False
+
+    # NEVER: Gender incompatibility
+    adult_genders = {"Men", "Women", "Unisex"}
+    kids_genders = {"Boys", "Girls"}
+    source_adult = source_gender in adult_genders
+    source_kids = source_gender in kids_genders
+    target_adult = target_gender in adult_genders
+    target_kids = target_gender in kids_genders
+
+    # No adult with kids mixing
+    if (source_adult and target_kids) or (source_kids and target_adult):
+        return False
+
+    # Unisex is compatible with any adult
+    if source_gender == "Unisex" or target_gender == "Unisex":
+        return True
+
+    # Same gender is fine
+    if source_gender == target_gender:
+        return True
+
+    # Men and Women don't mix (unless Unisex)
+    if source_gender in {"Men", "Women"} and target_gender in {"Men", "Women"}:
+        return False
+
+    return True
+
+
 # Load lookbook outfit pairings
 lookbook_df = spark.table(LOOKBOOK_TABLE)
 
+# Get all products for metadata lookup
+products_metadata_df = spark.table(PRODUCT_EMBEDDINGS_TABLE).select(
+    "product_id", "master_category", "sub_category", "article_type", "gender"
+)
+products_metadata = {
+    row["product_id"]: row.asDict()
+    for row in products_metadata_df.collect()
+}
+
 # Get outfit pairings for each product
-# Query both directions (product_1_id and product_2_id)
 outfit_pairs_1 = lookbook_df.select(
     F.col("product_1_id").alias("source_product_id"),
     F.col("product_2_id").alias("paired_product_id"),
@@ -190,24 +362,78 @@ outfit_pairs_2 = lookbook_df.select(
 # Union and aggregate
 all_pairs = outfit_pairs_1.union(outfit_pairs_2)
 
-# Rank pairings by co-occurrence and take top N per product
+# Rank pairings by co-occurrence - get more than needed for filtering
 from pyspark.sql.window import Window
 
 window = Window.partitionBy("source_product_id").orderBy(F.desc("co_occurrence_count"))
 
-top_pairings = all_pairs \
+# Get top 30 pairings per product (we'll filter down to COMPLETE_SET_LIMIT after compatibility check)
+top_pairings_raw = all_pairs \
     .withColumn("rank", F.row_number().over(window)) \
-    .filter(F.col("rank") <= COMPLETE_SET_LIMIT) \
-    .groupBy("source_product_id") \
-    .agg(F.collect_list("paired_product_id").alias("complete_set_ids"))
+    .filter(F.col("rank") <= 30) \
+    .select("source_product_id", "paired_product_id", "co_occurrence_count")
 
-# Convert to dict
-complete_set_map = {
-    row["source_product_id"]: [int(x) for x in row["complete_set_ids"]]
-    for row in top_pairings.collect()
-}
+# Convert to dict and apply compatibility filtering
+raw_pairings = top_pairings_raw.collect()
+
+# Group by source product
+from collections import defaultdict
+source_to_candidates = defaultdict(list)
+for row in raw_pairings:
+    source_to_candidates[row["source_product_id"]].append({
+        "paired_id": row["paired_product_id"],
+        "co_occurrence": row["co_occurrence_count"]
+    })
+
+# Apply outfit compatibility filtering
+complete_set_map = {}
+filtered_count = 0
+total_candidates = 0
+
+for source_id, candidates in source_to_candidates.items():
+    source_meta = products_metadata.get(source_id, {})
+    source_cat = categorize_product(
+        source_meta.get("master_category", ""),
+        source_meta.get("sub_category", ""),
+        source_meta.get("article_type", "")
+    )
+    source_gender = source_meta.get("gender", "")
+
+    compatible_ids = []
+    category_counts = {source_cat: 1}  # Track category counts for diversity
+
+    for candidate in candidates:
+        paired_id = candidate["paired_id"]
+        paired_meta = products_metadata.get(paired_id, {})
+        paired_cat = categorize_product(
+            paired_meta.get("master_category", ""),
+            paired_meta.get("sub_category", ""),
+            paired_meta.get("article_type", "")
+        )
+        paired_gender = paired_meta.get("gender", "")
+
+        total_candidates += 1
+
+        # Apply outfit compatibility rules
+        if not is_outfit_compatible(source_cat, source_gender, paired_cat, paired_gender):
+            filtered_count += 1
+            continue
+
+        # Ensure category diversity (max 2 from same category)
+        current_count = category_counts.get(paired_cat, 0)
+        if current_count >= 2:
+            continue
+
+        category_counts[paired_cat] = current_count + 1
+        compatible_ids.append(paired_id)
+
+        if len(compatible_ids) >= COMPLETE_SET_LIMIT:
+            break
+
+    complete_set_map[source_id] = compatible_ids
 
 print(f"✅ Computed complete-the-set for {len(complete_set_map):,} products")
+print(f"   Filtered {filtered_count:,} / {total_candidates:,} incompatible pairings ({100*filtered_count/max(total_candidates,1):.1f}%)")
 
 # COMMAND ----------
 

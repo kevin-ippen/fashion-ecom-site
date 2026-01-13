@@ -37,6 +37,61 @@ def get_image_url(product_id) -> str:
     return f"{WORKSPACE_HOST}/ajax-api/2.0/fs/files/Volumes/main/fashion_sota/product_images/{pid}.jpg"
 
 
+def _diversify_by_color(products: list, limit: int) -> list:
+    """
+    Diversify products by color to ensure visual variety.
+
+    Picks products with different colors first, then fills remaining slots.
+
+    Args:
+        products: List of product dicts
+        limit: Maximum number of products to return
+
+    Returns:
+        List of diverse products (max `limit` items)
+    """
+    if len(products) <= limit:
+        return products
+
+    from collections import defaultdict
+
+    # Group by color
+    by_color = defaultdict(list)
+    for p in products:
+        color = p.get("base_color", "Unknown")
+        by_color[color].append(p)
+
+    result = []
+    seen_ids = set()
+
+    # Round-robin through colors to get diversity
+    colors = list(by_color.keys())
+    color_idx = 0
+
+    while len(result) < limit:
+        if not colors:
+            break
+
+        color = colors[color_idx % len(colors)]
+
+        if by_color[color]:
+            p = by_color[color].pop(0)
+            pid = p.get("product_id")
+            if pid not in seen_ids:
+                result.append(p)
+                seen_ids.add(pid)
+        else:
+            # This color is exhausted, remove it
+            colors.remove(color)
+            if not colors:
+                break
+            continue
+
+        color_idx += 1
+
+    return result
+
+
 @router.get("", response_model=ProductListResponse)
 async def list_products(
     page: int = Query(1, ge=1, description="Page number"),
@@ -425,11 +480,16 @@ async def get_filter_options(db: AsyncSession = Depends(get_async_db)):
 @router.get("/{product_id}/similar", response_model=ProductListResponse)
 async def get_similar_products(
     product_id: str,
-    limit: int = Query(6, ge=1, le=20, description="Number of recommendations"),
+    limit: int = Query(4, ge=1, le=20, description="Number of recommendations"),
     db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Get visually similar products.
+    Get visually similar products from the SAME category.
+
+    Returns diverse, deduplicated products that are:
+    - Same master_category as source product
+    - Different product_ids (no duplicates)
+    - Diverse colors where possible
 
     First checks for pre-calculated recommendations (batch inference).
     Falls back to real-time vector search if pre-calculated data unavailable.
@@ -451,22 +511,67 @@ async def get_similar_products(
         if not source_product:
             raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
 
-        logger.info(f"Getting similar products for {product_id} - {source_product.get('product_display_name')}")
+        source_category = source_product.get("master_category")
+        source_sub_category = source_product.get("sub_category")
+        logger.info(f"Getting similar products for {product_id} - {source_product.get('product_display_name')} ({source_category}/{source_sub_category})")
 
         # Check for pre-calculated similar products (batch inference)
         similar_ids = source_product.get("similar_product_ids", [])
 
+        # Get source product attributes for filtering
+        source_gender = source_product.get("gender")
+        source_article_type = source_product.get("article_type")
+
         if similar_ids and len(similar_ids) > 0:
             # Use pre-calculated recommendations (fast path)
-            logger.info(f"Using pre-calculated similar products: {len(similar_ids)} IDs available")
+            # Fetch more than needed to allow for filtering/deduplication
+            fetch_limit = min(len(similar_ids), limit * 5)  # Fetch more for stricter filtering
+            logger.info(f"Using pre-calculated similar products: fetching {fetch_limit} of {len(similar_ids)} IDs")
 
             # Fetch full product details via efficient batch lookup
-            similar_products = await repo.get_products_by_ids(
-                product_ids=similar_ids[:limit],
+            all_similar = await repo.get_products_by_ids(
+                product_ids=similar_ids[:fetch_limit],
                 preserve_order=True
             )
 
-            logger.info(f"✅ Returning {len(similar_products)} pre-calculated similar products")
+            # Filter and deduplicate:
+            # 1. Remove source product
+            # 2. Keep only same category products
+            # 3. Keep only same gender (or Unisex)
+            # 4. Keep only same sub_category (shorts with shorts, pants with pants)
+            # 5. Deduplicate by product_id
+            # 6. Diversify by color
+            seen_ids = {product_id_int}
+            filtered = []
+
+            for p in all_similar:
+                pid = int(float(p.get("product_id", 0)))
+                # Skip duplicates and source product
+                if pid in seen_ids:
+                    continue
+                seen_ids.add(pid)
+
+                # SAME CATEGORY: Only include same master_category
+                if p.get("master_category") != source_category:
+                    continue
+
+                # SAME SUB_CATEGORY: shorts with shorts, pants with pants, etc.
+                if p.get("sub_category") != source_sub_category:
+                    continue
+
+                # SAME GENDER: Only same gender or Unisex
+                p_gender = p.get("gender")
+                if p_gender != source_gender and p_gender != "Unisex" and source_gender != "Unisex":
+                    continue
+
+                filtered.append(p)
+
+            logger.info(f"After filtering: {len(filtered)} products (category: {source_category}, sub: {source_sub_category}, gender: {source_gender})")
+
+            # Diversify by color - pick products with different colors
+            similar_products = _diversify_by_color(filtered, limit)
+
+            logger.info(f"✅ Returning {len(similar_products)} deduplicated, diverse similar products")
 
         else:
             # Fall back to real-time vector search (slow path)
@@ -513,16 +618,49 @@ async def get_similar_products(
 
             logger.info(f"Retrieved source embedding: shape={source_embedding.shape}, norm={norm:.4f}")
 
-            # Get similar products via vector search
-            similar_products = await recommendations_service.get_similar_products(
+            # Get similar products via vector search (fetch more for filtering)
+            all_similar = await recommendations_service.get_similar_products(
                 source_product=source_product,
                 source_embedding=source_embedding,
                 vector_search_service=vector_search_service,
                 lakebase_repo=repo,
-                limit=limit
+                limit=limit * 5  # Fetch more for stricter filtering
             )
 
-            logger.info(f"✅ Returning {len(similar_products)} vector-searched similar products")
+            # Apply strict filtering:
+            # 1. Same category
+            # 2. Same sub_category (shorts with shorts, pants with pants)
+            # 3. Same gender (or Unisex)
+            seen_ids = {product_id_int}
+            filtered = []
+
+            for p in all_similar:
+                pid = int(float(p.get("product_id", 0)))
+                if pid in seen_ids:
+                    continue
+                seen_ids.add(pid)
+
+                # SAME CATEGORY
+                if p.get("master_category") != source_category:
+                    continue
+
+                # SAME SUB_CATEGORY: shorts with shorts, pants with pants
+                if p.get("sub_category") != source_sub_category:
+                    continue
+
+                # SAME GENDER: Only same gender or Unisex
+                p_gender = p.get("gender")
+                if p_gender != source_gender and p_gender != "Unisex" and source_gender != "Unisex":
+                    continue
+
+                filtered.append(p)
+
+            logger.info(f"After filtering: {len(filtered)} products (category: {source_category}, sub: {source_sub_category}, gender: {source_gender})")
+
+            # Diversify by color
+            similar_products = _diversify_by_color(filtered, limit)
+
+            logger.info(f"✅ Returning {len(similar_products)} diverse vector-searched similar products")
 
         # Convert to ProductDetail models
         products = []
@@ -584,23 +722,37 @@ async def get_complementary_products(
 
         if complete_set_ids and len(complete_set_ids) > 0:
             # Use pre-calculated recommendations (fast path)
-            logger.info(f"Using pre-calculated complete-the-set: {len(complete_set_ids)} IDs available")
+            # Fetch more than needed to allow for outfit compatibility filtering
+            fetch_limit = min(len(complete_set_ids), limit * 5)
+            logger.info(f"Using pre-calculated complete-the-set: fetching {fetch_limit} of {len(complete_set_ids)} IDs for filtering")
 
             # Fetch full product details via efficient batch lookup
-            complete_products = await repo.get_products_by_ids(
-                product_ids=complete_set_ids[:limit],
+            all_complete_products = await repo.get_products_by_ids(
+                product_ids=complete_set_ids[:fetch_limit],
                 preserve_order=True
             )
 
+            # Apply outfit compatibility filtering to pre-calculated recommendations
+            # This enforces deterministic rules: no kid+adult, no pants+shorts, no men+women, etc.
+            from services.outfit_compatibility_service import outfit_compatibility_service
+
+            filtered_products = outfit_compatibility_service.filter_outfit_recommendations(
+                source_product=source_product,
+                candidates=all_complete_products,
+                limit=limit
+            )
+
+            logger.info(f"After outfit compatibility filtering: {len(filtered_products)} products (from {len(all_complete_products)})")
+
             # Convert to ProductDetail models
             products = []
-            for p in complete_products:
+            for p in filtered_products:
                 product = ProductDetail(**p)
                 product.image_url = get_image_url(product.product_id)
                 product.personalization_reason = "Styled together"
                 products.append(product)
 
-            logger.info(f"✅ Returning {len(products)} pre-calculated complete-the-set products")
+            logger.info(f"✅ Returning {len(products)} filtered complete-the-set products")
 
             return ProductListResponse(
                 products=products,

@@ -155,16 +155,27 @@ class OutfitCompatibilityService:
             return "accessories"
 
         # Apparel subcategories
-        if sub_cat == "Dress":
+        if sub_cat in ("Dress", "Saree"):
+            # Sarees and dresses are complete outfits
             return "dress"
         if sub_cat == "Bottomwear":
             return "bottoms"
+        if sub_cat == "Socks" and master_cat == "Apparel":
+            # Baby booties/socks under Apparel are accessories
+            return "accessories"
+        if sub_cat == "Apparel Set":
+            # Clothing sets are complete outfits - treat like dress
+            return "dress"
 
         # Outerwear vs regular tops
         if sub_cat == "Topwear":
             if article_type in self.OUTERWEAR_TYPES:
                 return "outerwear"
             return "tops"
+
+        # Default: unknown apparel items treated as accessories
+        if master_cat == "Apparel":
+            return "accessories"
 
         # Default fallback
         logger.warning(f"Unknown category for product: {master_cat}/{sub_cat}/{article_type}")
@@ -301,18 +312,32 @@ class OutfitCompatibilityService:
         source_cat = self.categorize_product(source_product)
         rec_cat = self.categorize_product(rec_product)
 
-        logger.debug(f"Checking compatibility: {source_cat} + {rec_cat}")
+        # Get identifying info for logging
+        source_name = source_product.get("product_display_name", source_product.get("product_id", "?"))
+        rec_name = rec_product.get("product_display_name", rec_product.get("product_id", "?"))
+        source_sub = source_product.get("sub_category", "?")
+        rec_sub = rec_product.get("sub_category", "?")
+
+        logger.info(f"🔍 Checking: [{source_cat}] {source_sub} vs [{rec_cat}] {rec_sub}")
+
+        # NEVER MATCH: Unknown categories (miscategorized products)
+        if source_cat == "unknown" or rec_cat == "unknown":
+            logger.info(f"❌ REJECTED: Unknown category: source={source_cat}, rec={rec_cat}")
+            return False
 
         # NEVER MATCH: Isolated categories
         if source_cat in {"innerwear", "sleepwear", "swimwear"}:
-            logger.debug(f"❌ Source is isolated category: {source_cat}")
+            logger.info(f"❌ REJECTED: Source is isolated category: {source_cat}")
             return False
         if rec_cat in {"innerwear", "sleepwear", "swimwear"}:
-            logger.debug(f"❌ Recommendation is isolated category: {rec_cat}")
+            logger.info(f"❌ REJECTED: Recommendation is isolated category: {rec_cat}")
             return False
 
         # NEVER MATCH: Gender/age incompatibility
         if not self.is_gender_compatible(source_product, rec_product):
+            source_gender = source_product.get("gender", "?")
+            rec_gender = rec_product.get("gender", "?")
+            logger.info(f"❌ REJECTED: Gender incompatible: {source_gender} vs {rec_gender}")
             return False
 
         # NEVER MATCH: Same category duplicates (except outerwear layering)
@@ -326,18 +351,18 @@ class OutfitCompatibilityService:
                     # Allow light outerwear combinations
                     light_outer = {"Cardigans", "Shrug"}
                     if source_article in light_outer or rec_article in light_outer:
-                        logger.debug(f"✅ Allowed layering: {source_article} + {rec_article}")
+                        logger.info(f"✅ Allowed layering: {source_article} + {rec_article}")
                         return True
 
-            logger.debug(f"❌ Duplicate category: {source_cat}")
+            logger.info(f"❌ REJECTED: Same category duplicate: {source_cat} (source: {source_sub}, rec: {rec_sub})")
             return False
 
         # NEVER MATCH: Dress with tops/bottoms (dress is complete)
         if source_cat == "dress" and rec_cat in {"tops", "bottoms"}:
-            logger.debug(f"❌ Dress with {rec_cat} (dress is complete)")
+            logger.info(f"❌ REJECTED: Dress with {rec_cat} (dress is complete)")
             return False
         if rec_cat == "dress" and source_cat in {"tops", "bottoms"}:
-            logger.debug(f"❌ {source_cat} with dress (dress is complete)")
+            logger.info(f"❌ REJECTED: {source_cat} with dress (dress is complete)")
             return False
 
         # SPECIAL RULES: Athletic/Activewear
@@ -397,9 +422,10 @@ class OutfitCompatibilityService:
                     return False
 
         # ALWAYS MATCH: Check against compatible pairs
-        pair = self.normalize_pair(source_cat, rec_cat)
-        if pair in self.COMPATIBLE_PAIRS:
-            logger.debug(f"✅ Compatible pair: {pair}")
+        pair = (source_cat, rec_cat)
+        reverse_pair = (rec_cat, source_cat)
+        if pair in self.COMPATIBLE_PAIRS or reverse_pair in self.COMPATIBLE_PAIRS:
+            logger.info(f"✅ ACCEPTED: Compatible pair {source_cat} + {rec_cat}")
             return True
 
         # Check for wildcard incompatibilities
@@ -407,11 +433,11 @@ class OutfitCompatibilityService:
             if "*" in incomp_pair:
                 restricted_cat = incomp_pair[0] if incomp_pair[1] == "*" else incomp_pair[1]
                 if source_cat == restricted_cat or rec_cat == restricted_cat:
-                    logger.debug(f"❌ Wildcard incompatibility: {restricted_cat}")
+                    logger.info(f"❌ REJECTED: Wildcard incompatibility: {restricted_cat}")
                     return False
 
         # Default: allow if not explicitly blocked
-        logger.debug(f"✅ Default allow: {pair}")
+        logger.info(f"✅ ACCEPTED: Default allow for {source_cat} + {rec_cat}")
         return True
 
     def is_color_compatible(
