@@ -23,10 +23,9 @@ WORKSPACE_HOST = settings.DATABRICKS_WORKSPACE_URL
 async def get_image(image_path: str):
     """
     Redirect to Databricks Files API for direct image access
-    
+
     Pattern: https://{workspace-host}/ajax-api/2.0/fs/files{volume_path}
-    Example: https://adb-984752964297111.11.azuredatabricks.net/ajax-api/2.0/fs/files/Volumes/main/fashion_demo/raw_data/images/10001.jpg
-    
+
     This approach:
     - Avoids proxying large files through the app
     - Leverages browser's built-in auth (user's session)

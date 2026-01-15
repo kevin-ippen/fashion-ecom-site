@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from databricks.sdk import WorkspaceClient
+from core.config import settings
 
 router = APIRouter(prefix="/debug", tags=["debug"])
 
@@ -7,16 +8,16 @@ router = APIRouter(prefix="/debug", tags=["debug"])
 async def test_query(product_id: str):
     """Test query directly"""
     w = WorkspaceClient()
-    
+
     query = f"""
     SELECT COUNT(*) as count
     FROM main.fashion_sota.outfit_recommendations_from_lookbook
     WHERE product_1_id = '{product_id}'
     """
-    
+
     execution = w.statement_execution.execute_statement(
         statement=query,
-        warehouse_id="148ccb90800933a1"
+        warehouse_id=settings.SQL_WAREHOUSE_ID
     )
     result = execution.result
     

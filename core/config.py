@@ -25,10 +25,11 @@ class Settings(BaseSettings):
     DEBUG: bool = bool(os.getenv("DEBUG", "0") == "1")
 
     # Lakebase Postgres (env is injected when the Lakebase resource is attached to the app)
-    LAKEBASE_HOST: str = os.getenv("PGHOST", "instance-51628d83-d2d1-4cba-af04-af2b5624ddc0.database.azuredatabricks.net")
+    # For local development, set PGHOST, PGUSER in your .env file
+    LAKEBASE_HOST: str = os.getenv("PGHOST", "")
     LAKEBASE_PORT: int = int(os.getenv("PGPORT", "5432"))
-    LAKEBASE_DATABASE: str = os.getenv("PGDATABASE", "databricks_postgres")  # Changed from "main"
-    LAKEBASE_USER: str = os.getenv("PGUSER", "")  # SP in Apps; kevin.ippen@databricks.com locally
+    LAKEBASE_DATABASE: str = os.getenv("PGDATABASE", "databricks_postgres")
+    LAKEBASE_USER: str = os.getenv("PGUSER", "")
     LAKEBASE_SSL_MODE: str = "require"
 
     # Unity Catalog (source metadata) - UPDATED FOR FASHION_SOTA
@@ -65,22 +66,25 @@ class Settings(BaseSettings):
                 return f"https://{host}"
             return host
 
-        # Final fallback to hardcoded default
-        return "https://adb-984752964297111.11.azuredatabricks.net"
+        # No default - must be configured via environment
+        raise RuntimeError(
+            "DATABRICKS_WORKSPACE_URL or DATABRICKS_HOST must be set. "
+            "Set via environment variable or .env file."
+        )
 
     # CLIP Multimodal Model Serving
     CLIP_ENDPOINT_NAME: str = "fashionclip-endpoint"  # FashionCLIP endpoint
     CLIP_UC_MODEL: str = "main.fashion_demo.clip_multimodal_encoder"  # Still in fashion_demo
     CLIP_EMBEDDING_DIM: int = 512
 
-    # Vector Search Endpoint - Using shared endpoint
-    VS_ENDPOINT_NAME: str = "one-env-shared-endpoint-15"
+    # Vector Search Endpoint
+    VS_ENDPOINT_NAME: str = os.getenv("VS_ENDPOINT_NAME", "one-env-shared-endpoint-15")
 
     # Vector Search Index - US relevant products
-    VS_INDEX: str = "main.fashion_sota.product_embeddings_us_relevant_index"
+    VS_INDEX: str = os.getenv("VS_INDEX", "main.fashion_sota.product_embeddings_us_relevant_index")
 
     # SQL Warehouse for queries
-    SQL_WAREHOUSE_ID: str = "148ccb90800933a1"
+    SQL_WAREHOUSE_ID: str = os.getenv("SQL_WAREHOUSE_ID", "")
 
     # Legacy indexes - REMOVED (no longer needed with unified index)
     # VS_IMAGE_INDEX: str = "main.fashion_demo.vs_image_search"  # DELETED

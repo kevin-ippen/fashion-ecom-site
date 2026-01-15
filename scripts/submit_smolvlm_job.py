@@ -1,6 +1,10 @@
 """
 Submit SmolVLM attribute extraction job to Databricks
+
+Requires environment variables:
+- DATABRICKS_NOTEBOOK_PATH: Path to notebook in workspace (e.g., /Users/user@example.com/notebook_name)
 """
+import os
 import sys
 import time
 from pathlib import Path
@@ -20,8 +24,17 @@ print("\n🔄 Initializing Databricks workspace client...")
 w = WorkspaceClient()
 print(f"✅ Connected to: {w.config.host}")
 
-# Configuration
-NOTEBOOK_PATH = "/Users/kevin.ippen@databricks.com/smolvlm_batch_attribute_extraction"
+# Configuration (from environment)
+NOTEBOOK_PATH = os.getenv("DATABRICKS_NOTEBOOK_PATH", "")
+if not NOTEBOOK_PATH:
+    # Default to user's home folder in workspace
+    user_email = os.getenv("DATABRICKS_USER", "")
+    if user_email:
+        NOTEBOOK_PATH = f"/Users/{user_email}/smolvlm_batch_attribute_extraction"
+    else:
+        print("Error: DATABRICKS_NOTEBOOK_PATH or DATABRICKS_USER environment variable required")
+        sys.exit(1)
+
 NOTEBOOK_SOURCE = Path(__file__).parent.parent / "notebooks" / "smolvlm_batch_attribute_extraction.py"
 
 print(f"\n📝 Notebook Configuration:")

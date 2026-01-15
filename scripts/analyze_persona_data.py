@@ -10,14 +10,15 @@ import numpy as np
 
 # Get OAuth token
 from databricks import sdk
+import os
 workspace_client = sdk.WorkspaceClient()
 token = workspace_client.config.oauth_token().access_token
 
-# Lakebase connection
-PGHOST = "instance-51628d83-d2d1-4cba-af04-af2b5624ddc0.database.azuredatabricks.net"
-PGPORT = 5432
-PGDATABASE = "databricks_postgres"
-PGUSER = "kevin.ippen@databricks.com"
+# Lakebase connection (from environment or .env file)
+PGHOST = os.getenv("PGHOST", "")
+PGPORT = int(os.getenv("PGPORT", "5432"))
+PGDATABASE = os.getenv("PGDATABASE", "databricks_postgres")
+PGUSER = os.getenv("PGUSER", "")
 
 # Build connection string
 connection_string = f"postgresql+asyncpg://{PGUSER}:{token}@{PGHOST}:{PGPORT}/{PGDATABASE}"
@@ -120,8 +121,8 @@ async def analyze_data():
         for row in result.fetchall():
             print(f"  {row[0]}: {row[1]:,} products")
 
-        # Check for Indian garments
-        print("\n--- Indian Garments Analysis ---")
+        # Check for excluded subcategories
+        print("\n--- Excluded Subcategories Analysis ---")
         result = await session.execute(text("""
             SELECT sub_category, COUNT(*) as count
             FROM fashion_sota.products_lakebase
@@ -130,10 +131,10 @@ async def analyze_data():
             GROUP BY sub_category
             ORDER BY count DESC
         """))
-        indian_garments = result.fetchall()
-        total_indian = sum(row[1] for row in indian_garments)
-        print(f"  Total Indian Garments: {total_indian:,}")
-        for row in indian_garments:
+        excluded_items = result.fetchall()
+        total_excluded = sum(row[1] for row in excluded_items)
+        print(f"  Total Excluded Items: {total_excluded:,}")
+        for row in excluded_items:
             print(f"    {row[0]}: {row[1]:,} products")
 
         # Check luxury products (price >= 1500)

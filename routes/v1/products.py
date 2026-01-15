@@ -593,7 +593,7 @@ async def get_similar_products(
 
             execution_result = w.statement_execution.execute_statement(
                 statement=query,
-                warehouse_id=settings.SQL_WAREHOUSE_ID if hasattr(settings, 'SQL_WAREHOUSE_ID') else "148ccb90800933a1"
+                warehouse_id=settings.SQL_WAREHOUSE_ID
             )
             result = execution_result.result
 
@@ -798,7 +798,7 @@ async def get_complementary_products(
         LIMIT {search_limit}
         """
 
-        warehouse_id = settings.SQL_WAREHOUSE_ID if hasattr(settings, 'SQL_WAREHOUSE_ID') else "148ccb90800933a1"
+        warehouse_id = settings.SQL_WAREHOUSE_ID
         logger.info(f"Executing lookbook query with warehouse: {warehouse_id}")
 
         execution_result = w.statement_execution.execute_statement(

@@ -12,6 +12,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 import random
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,7 @@ class NeighborhoodPatternService:
 
             execution = w.statement_execution.execute_statement(
                 statement=embedding_query,
-                warehouse_id="148ccb90800933a1"
+                warehouse_id=settings.SQL_WAREHOUSE_ID
             )
             result = execution.result
 

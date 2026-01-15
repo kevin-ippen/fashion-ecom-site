@@ -27,19 +27,10 @@ class LakebaseRepository:
 
     def _get_base_product_filter(self) -> str:
         """
-        Get base WHERE clause to filter out unwanted product categories from frontend
+        Get base WHERE clause to filter product categories for the storefront.
 
-        Excludes:
-        - Innerwear (underwear, bras, intimates)
-        - Loungewear and Nightwear (sleepwear, pajamas)
-        - Swimwear
-        - Indian traditional garments (Saree, Kurta, Dupatta, Churidar, etc.)
-        - Free gifts and personal care items
-        - Products with no "complete the outfit" recommendations
-
-        Only includes:
-        - Apparel, Accessories, Footwear (Western/international styles)
-        - Products that have outfit pairing data
+        Excludes certain subcategories and article types that are outside
+        the target product assortment for this demo application.
         """
         return """
             master_category IN ('Apparel', 'Accessories', 'Footwear')

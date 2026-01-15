@@ -21,14 +21,15 @@ import json as json_module
 workspace_client = sdk.WorkspaceClient()
 token = workspace_client.config.oauth_token().access_token
 
-# Lakebase connection details
-PGHOST = "instance-51628d83-d2d1-4cba-af04-af2b5624ddc0.database.azuredatabricks.net"
-PGPORT = 5432
-PGDATABASE = "databricks_postgres"
-PGUSER = "kevin.ippen@databricks.com"
+# Lakebase connection details (from environment or .env file)
+import os
+PGHOST = os.getenv("PGHOST", "")
+PGPORT = int(os.getenv("PGPORT", "5432"))
+PGDATABASE = os.getenv("PGDATABASE", "databricks_postgres")
+PGUSER = os.getenv("PGUSER", "")
 
-# SQL Warehouse for fetching embeddings
-SQL_WAREHOUSE_ID = "148ccb90800933a1"
+# SQL Warehouse for fetching embeddings (from environment)
+SQL_WAREHOUSE_ID = os.getenv("SQL_WAREHOUSE_ID", "")
 
 # 5 high-quality personas (adjusted for actual price range $0-300)
 # Each persona has DIVERSE category sampling to avoid footwear-only results
@@ -92,7 +93,7 @@ PERSONAS = {
     },
 }
 
-# Excluded Indian garments
+# Excluded subcategories (outside target assortment)
 EXCLUDED_SUBCATEGORIES = [
     "Saree", "Kurta", "Kurtas", "Dupatta", "Churidar", "Salwar",
     "Lehenga Choli", "Kameez", "Dhoti", "Patiala", "Kurta Sets",

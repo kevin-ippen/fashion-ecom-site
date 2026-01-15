@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """
 Execute Lakebase setup SQL script using Databricks SDK
+
+Requires environment variables:
+- SQL_WAREHOUSE_ID: Databricks SQL Warehouse ID
 """
 import os
 import sys
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.sql import StatementState
 
-# SQL Warehouse ID (Shared Endpoint - Large)
-WAREHOUSE_ID = "148ccb90800933a1"
+# SQL Warehouse ID (from environment)
+WAREHOUSE_ID = os.getenv("SQL_WAREHOUSE_ID", "")
+if not WAREHOUSE_ID:
+    print("Error: SQL_WAREHOUSE_ID environment variable not set")
+    sys.exit(1)
 
 # Read SQL script
 script_path = "scripts/setup_lakebase_fashion_sota_v2.sql"

@@ -13,11 +13,11 @@ from databricks import sdk
 workspace_client = sdk.WorkspaceClient()
 token = workspace_client.config.oauth_token().access_token
 
-# Lakebase connection
-PGHOST = "instance-51628d83-d2d1-4cba-af04-af2b5624ddc0.database.azuredatabricks.net"
-PGPORT = 5432
-PGDATABASE = "databricks_postgres"
-PGUSER = "kevin.ippen@databricks.com"
+# Lakebase connection (from environment or .env file)
+PGHOST = os.getenv("PGHOST", "")
+PGPORT = int(os.getenv("PGPORT", "5432"))
+PGDATABASE = os.getenv("PGDATABASE", "databricks_postgres")
+PGUSER = os.getenv("PGUSER", "")
 
 # Build connection string
 connection_string = f"postgresql+asyncpg://{PGUSER}:{token}@{PGHOST}:{PGPORT}/{PGDATABASE}"
